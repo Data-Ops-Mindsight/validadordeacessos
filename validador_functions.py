@@ -1352,6 +1352,566 @@ def get_dataframe_from_api(
     else:
         return fetch_all_pages_sequential(system, tenant, endpoint, token, page_size, end_url_with_slash, ignore_page_size_limits)
 
+HTTP_TIMEOUT_SECONDS = 30
+
+
+def _host(system: str, is_sandbox: Optional[bool] = None) -> str:
+    """
+    Monta o host de um sistema Mindsight, escolhendo entre produção e sandbox.
+
+    Parâmetros:
+    ----------
+    system : str
+        Prefixo do sistema no host (ex: 'full', 'controle', 'auth').
+    is_sandbox : bool, opcional
+        Se deve usar o host de sandbox. Quando None (padrão), usa a opção global
+        `is_sandbox`.
+
+    Retorna:
+    -------
+    str
+        `<system>.mindsight.com.br` (ou `<system>.sandbox-full-mindsight.click`).
+    """
+    if is_sandbox is None:
+        is_sandbox = get_option("is_sandbox")
+    suffix = "sandbox-full-mindsight.click" if is_sandbox else "mindsight.com.br"
+    return f"{system}.{suffix}"
+
+def _staff_url(tenant: str, suffix: str = "", is_sandbox: Optional[bool] = None) -> str:
+    """Monta uma URL do admin Django (staff) no host `auth`.
+
+    Formato: `https://auth.<host>/<tenant>/staff/<suffix>`. Compartilhado por
+    `get_login_url` (suffix `login/`) e `admin_import.import_csv`
+    (suffix `<model>/import/`), para não duplicar o esquema do host/path.
+    """
+    return f"https://{_host('auth', is_sandbox)}/{tenant}/staff/{suffix}"
+
+def transform_to_url(df: pd.DataFrame, column_name: str, tenant: str, field: str, system: str = 'full') -> pd.DataFrame:
+    """
+    Transforma os valores de uma coluna do dataframe em URLs formatadas.
+
+    Parâmetros:
+    ----------
+    df : pd.DataFrame
+        DataFrame que contém a coluna a ser transformada.
+    column_name : str
+        Nome da coluna que contém os IDs a serem transformados em URLs.
+    tenant : str
+        Nome do tenant ou cliente específico do sistema (ex: 'tenantexemplo').
+    field : str
+        Nome do campo ou endpoint da API que será acessado (ex: 'person').
+    system : str, opcional
+        Nome do sistema que será usado no domínio (ex: 'acompanhamento'). O padrão é 'full'.
+
+    Retorna:
+    -------
+    pd.DataFrame
+        DataFrame com a coluna transformada em URLs formatadas.
+
+    Exemplos:
+    --------
+    Transformar IDs em URLs:
+    >>> df = pd.DataFrame({'id': [1, 2, 3]})
+    >>> tenant = 'tenantexemplo'
+    >>> field = 'person'
+    >>> system = 'full'
+    >>> df = transform_to_url(df, 'id', tenant, field, system)
+    >>> print(df)
+       id
+    0  https://full.mindsight.com.br/tenantexemplo/api/v1/person/1/
+    1  https://full.mindsight.com.br/tenantexemplo/api/v1/person/2/
+    2  https://full.mindsight.com.br/tenantexemplo/api/v1/person/3/
+    """
+    domain = _host(system)
+    template_url = 'https://{domain}/{tenant}/api/v1/{field}/{id}/'
+    df[column_name] = df[column_name].apply(lambda x: template_url.format(domain=domain, tenant=tenant, field=field, id=x))
+    # Remove URLs com ID vazio
+    df.loc[df[column_name] == template_url.format(domain=domain, tenant=tenant, field=field, id=''), column_name] = ''
+    return df
+
+def transform_columns_to_url(df: pd.DataFrame, tenant: str, url_dict: dict[str, str], system: str = 'full') -> pd.DataFrame:
+    """
+    Transforma os valores de várias colunas do dataframe em URLs formatadas.
+    
+    Parâmetros:
+    ----------
+    df : pd.DataFrame
+        DataFrame que contém as colunas a serem transformadas.
+    tenant : str
+        Nome do tenant ou cliente específico do sistema (ex: 'tenantexemplo').
+    url_dict : dict
+        Dicionário onde as chaves são os nomes das colunas do DataFrame e os valores são os campos ou endpoints da API que serão acessados 
+        (ex: {'person': 'person', 'project': 'project'}).
+    system : str, opcional
+        Nome do sistema que será usado no domínio (ex: 'acompanhamento'). O padrão é 'full'.
+
+    Retorna:
+    -------
+    pd.DataFrame
+        DataFrame com as colunas transformadas em URLs formatadas.
+    """
+    for column, field in url_dict.items():
+        df = transform_to_url(df, column, tenant, field, system)
+    return df
+
+def get_endpoint_url(
+        system: str,
+        tenant: str,
+        endpoint: str,
+        id: Optional[str | int] = None,
+        end_url_with_slash: bool = True,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None
+    ) -> str:
+    """
+    Gera uma URL formatada para acessar um endpoint de API de um sistema Mindsight.
+    Se a configuração "is_sandbox" estiver ativada, o domínio da URL será ajustado para apontar para o ambiente de sandbox.
+
+    Parâmetros:
+    ----------
+    system : str
+        Nome do sistema que será usado no domínio (ex: 'acompanhamento').
+    tenant : str
+        Nome do tenant ou cliente específico do sistema (ex: 'tenantexemplo').
+    endpoint : str
+        Nome do endpoint da API que será acessado (ex: 'projectgoalreviewrecord').
+    id : str, opcional
+        ID específico para ser incluído na URL do endpoint. Se não fornecido, a URL será gerada sem o ID.
+    end_url_with_slash : bool, opcional
+        Define se a URL vai terminar com um "/" ou não (padrão: True).
+    page : int, opcional
+        Número da página para paginação. Se fornecido, será adicionado como parâmetro na URL.
+    page_size : int, opcional
+        Tamanho da página para paginação. Se fornecido, será adicionado como parâmetro na URL.
+
+    Retorna:
+    -------
+    str
+        URL formatada no padrão `https://<system>.mindsight.com.br/<tenant>/api/v1/<endpoint>/[<id>/]`.
+        Caso `is_sandbox` esteja ativado, o domínio será `https://<system>.sandbox-full-mindsight.click/<tenant>/api/v1/<endpoint>/[<id>/]`.
+
+    Exemplos:
+    --------
+    Gerar uma URL para um endpoint sem ID:
+    >>> get_endpoint_url('acompanhamento', 'tenantexemplo', 'projectgoalreviewrecord')
+    'https://acompanhamento.mindsight.com.br/tenantexemplo/api/v1/projectgoalreviewrecord/'
+
+    Gerar uma URL para um endpoint sem ID e sem barra no final:
+    >>> get_endpoint_url('acompanhamento', 'tenantexemplo', 'projectgoalreviewrecord', end_url_with_slash=False)
+    'https://acompanhamento.mindsight.com.br/tenantexemplo/api/v1/projectgoalreviewrecord'
+
+    Gerar uma URL para um endpoint com ID:
+    >>> get_endpoint_url('acompanhamento', 'tenantexemplo', 'projectgoalreviewrecord', '12345')
+    'https://acompanhamento.mindsight.com.br/tenantexemplo/api/v1/projectgoalreviewrecord/12345/'
+    """
+    domain = _host(system)
+
+    template_url = f'https://{domain}/{tenant}/api/v1/{endpoint}/'
+
+    if id is not None:
+        template_url = f'{template_url}{id}/'
+    if not end_url_with_slash and template_url.endswith('/'):
+        template_url = template_url[:-1]
+
+    if page is not None and page_size is not None:
+        connector = '&' if '?' in template_url else '?'
+        template_url = f'{template_url}{connector}page={page}&page_size={page_size}'
+
+    return template_url
+
+def define_page_size(page_size: Optional[int], total_records: int, is_parallel_request: bool, num_parallel_workers: Optional[int] = None, ignore_page_size_limits: bool = False) -> int:
+    """
+    Define o tamanho da página de uma requisição de API, considerando limites de tamanho e otimização de paralelismo.
+
+    Parâmetros:
+    -----------
+    page_size : int, opcional
+        Tamanho da página desejado. Se não fornecido, o tamanho padrão será usado.
+    total_records : int
+        Número total de registros a serem recuperados.
+    is_parallel_request : bool
+        Indica se a requisição será feita de forma paralela.
+    num_parallel_workers : int, opcional
+        Número de workers paralelos que serão usados. Se não fornecido, um valor padrão será usado.
+    ignore_page_size_limits : bool, opcional
+        Indica se os limites padrão de tamanho de página devem ser ignorados.
+
+    Retorna:
+    --------
+    int
+        Tamanho da página ajustado para otimizar a requisição de API.
+    """
+    DEFAULT_PAGE_SIZE = 5000
+    # MAX_PAGE_SIZE = 10000
+    # MIN_PAGE_SIZE = 2000 # Por algum motivo, page_size menor que 2000 pode causar registros duplicados em páginas diferentes
+    # Por enquanto, o mínimo e máximo de page_size serão definidos como 5000 
+    # pois há problema com registros duplicados em páginas diferentes
+    MIN_PAGE_SIZE = 5000
+    MAX_PAGE_SIZE = 5000
+
+    if page_size is None:
+        if is_parallel_request:
+            # Ajustar o número e tamanho de paginas para otimizar o paralelismo
+            min_pages = num_parallel_workers if num_parallel_workers else 4
+            min_pages = max(min_pages, 1)
+            ideal_page_size = ceil(total_records/min_pages)
+            page_size = ideal_page_size
+        else:
+            page_size = DEFAULT_PAGE_SIZE
+
+    if ignore_page_size_limits:
+        if page_size < MIN_PAGE_SIZE:
+            logger.warning(f"page_size {page_size} can cause duplicated records in different pages.")
+        elif page_size > MAX_PAGE_SIZE:
+            logger.warning(f"page_size {page_size} can cause performance issues.")
+    else:
+        page_size = max(page_size, MIN_PAGE_SIZE)
+        page_size = min(page_size, MAX_PAGE_SIZE)
+
+    return page_size
+
+def _get(url: str, token: str) -> requests.Response:
+    session = get_option("session")
+    if session is not None:
+        return session.get(url)
+    headers = {'Authorization': f'Token {token}'}
+    return requests.request("GET", url, headers=headers, data={})
+
+
+def _ensure_csrf(session, url: str, seed_url: Optional[str] = None,
+                 timeout: int = HTTP_TIMEOUT_SECONDS) -> str:
+    """Retorna o cookie csrftoken do host de `url`, semeando-o se ausente.
+
+    O Django define csrftoken por host; uma sessão autenticada em auth.* não possui
+    csrftoken para controle.*. Para semear, faz um GET numa página HTML daquele host
+    que emite o cookie — por padrão o tenant root /<tenant>/ — e o relê com escopo de
+    domínio. Passe `seed_url` para escolher outra página (login() semeia pela própria
+    /<tenant>/staff/login/; o token é válido para todo o host de qualquer forma).
+    """
+    parts = urlsplit(url)
+    host = parts.hostname
+    # Escopo por domínio evita CookieConflictError quando a sessão carrega csrftoken de
+    # vários hosts (mesma proteção usada em login()).
+    token = session.cookies.get("csrftoken", domain=host)
+    if not token:
+        if seed_url is None:
+            tenant = parts.path.lstrip("/").split("/", 1)[0]  # primeiro segmento do path
+            seed_url = f"{parts.scheme}://{host}/{tenant}/"
+        session.get(seed_url, timeout=timeout)
+        token = session.cookies.get("csrftoken", domain=host)
+    if not token:
+        raise ValueError(f"Could not obtain a CSRF token for host {host}")
+    return token
+
+
+def _is_login_redirect(location_or_url: str) -> bool:
+    """True se `location_or_url` aponta para a página de login do Django.
+
+    Uma sessão sem (ou com) credenciais válidas é redirecionada de volta para /login/
+    em vez da página alvo. Compara o fim do path (e não um `in`) para não confundir com
+    tenants cujo slug contenha "login". Compartilhado por `login()` (que passa a URL final
+    após redirects) e `import_csv` (que passa o header Location de um 302 não seguido).
+    """
+    return (location_or_url or "").rstrip("/").endswith("/login")
+
+
+def _request(method: str, url: str, token: str, *, json=None, data=None,
+             files=None, headers=None, timeout=HTTP_TIMEOUT_SECONDS) -> requests.Response:
+    """Contraparte de escrita do `_get`: alterna entre sessão e Token.
+
+    Com uma sessão registrada, autentica pelos cookies dela e anexa o CSRF exigido pelo
+    Django em métodos não-seguros (`X-CSRFToken` + `Referer`); caso contrário, cai no
+    header `Authorization: Token`. O ramo apenas decide o requester e os headers de auth;
+    a chamada HTTP em si é única.
+    """
+    session = get_option("session")
+    if session is not None:
+        auth_headers = {"Referer": url, "X-CSRFToken": _ensure_csrf(session, url, timeout=timeout)}
+        requester = session.request
+    else:
+        auth_headers = {"Authorization": f"Token {token}"}
+        requester = requests.request
+    return requester(method, url, json=json, data=data, files=files,
+                     headers={**auth_headers, **(headers or {})}, timeout=timeout)
+
+
+def _session_pool_limit(session) -> int:
+    # HTTPAdapter stores the per-host pool size as the (stable, private) _pool_maxsize;
+    # default is 10. Fall back to 10 if the attribute is ever absent.
+    adapter = session.get_adapter("https://")
+    return getattr(adapter, "_pool_maxsize", 10) or 10
+
+
+def get_from_url(url: str, token: str, accepted_responses: list[int] = [200, 201]) -> Dict[str, Any]:
+    """
+    Faz uma requisição HTTP GET para uma URL de API com autenticação via token.
+
+    Parâmetros:
+    ----------
+    url : str
+        URL da API que será acessada.
+    token : str
+        Token de autenticação necessário para acessar a API.
+
+    Retorna:
+    -------
+    dict
+        Corpo da resposta da API em formato JSON, convertido para um dicionário Python.
+
+    Exceções:
+    --------
+    Pode lançar exceções relacionadas a falhas na conexão ou à decodificação do JSON.
+
+    Exemplos:
+    --------
+    Requisitar dados de uma API com autenticação por token:
+    >>> url = 'https://api.example.com/data'
+    >>> token = 'abcdef123456'
+    >>> response = get_from_url(url, token)
+    >>> print(response)
+    {'key': 'value'}
+    """
+    try:
+        response = _get(url, token)
+        response_body = json.loads(response.text)
+    except Exception as e:
+        logger.exception(f"Failed to fetch data from {url}. Error: {e}")
+        raise e
+
+    if response.status_code not in accepted_responses:
+      raise ValueError(f"ERRO: Código {response.status_code}. {response.json()}")
+
+    return response_body
+
+def get_page_with_page_size(url: str, token: str, page: int, page_size: int = 1000) -> Dict[str, Any]:
+    """
+    Faz uma requisição a uma API com suporte a paginação, incluindo os parâmetros
+    de tamanho da página (`page_size`) e número da página (`page`) na URL.
+
+    Parâmetros:
+    ----------
+    url : str
+        URL base da API para a qual será feita a requisição.
+        A URL pode ou não conter parâmetros de consulta (`?`).
+    token : str
+        Token de autenticação necessário para acessar a API.
+    page : int
+        Número da página a ser requisitada.
+    page_size : int, opcional
+        Número de registros por página (padrão: 1000).
+
+    Retorna:
+    -------
+    dict
+        Resposta da API em formato JSON, convertida para um dicionário Python.
+
+    Exceções:
+    --------
+    Pode lançar exceções relacionadas a falhas na conexão ou à decodificação do JSON,
+    propagadas pela função `get_from_url`.
+
+    Exemplos:
+    --------
+    Requisitar a terceira página com 50 registros por página:
+    >>> url = 'https://api.example.com/items'
+    >>> token = 'abcdef123456'
+    >>> page = 3
+    >>> page_size = 50
+    >>> response = get_page_with_page_size(url, token, page, page_size)
+    >>> print(response)
+    {'results': [...], 'count': 150, 'next': '...', 'previous': '...'}
+    """
+
+    if "?" in url:
+        url = f'{url}&page_size={page_size}&page={page}'
+    else:
+        url = f'{url}?page_size={page_size}&page={page}'
+    return get_from_url(url, token)
+
+# def fetch_all_pages_sequential(
+#     system: str,
+#     tenant: str,
+#     endpoint: str,
+#     token: str,
+#     page_size: Optional[int] = None,
+#     end_url_with_slash: bool = True,
+#     ignore_page_size_limits: bool = False
+# ) -> pd.DataFrame:
+#     """
+#     Faz a requisição de todas as páginas de um endpoint específico da API e retorna os dados como um DataFrame.
+
+#     Parâmetros:
+#     -----------
+#     system : str
+#         Nome do sistema usado na composição da URL do endpoint.
+#     tenant : str
+#         Nome do tenant usado na composição da URL do endpoint.
+#     endpoint : str
+#         Nome do endpoint da API a ser acessado.
+#     token : str
+#         Token de autenticação necessário para acessar a API.
+#     page_size : int, opcional
+#         Número de itens por página. O padrão é 5000.
+#     end_url_with_slash : bool, opcional
+#         Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
+#     ignore_page_size_limits : bool, opcional
+#         Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
+
+#     Retorna:
+#     --------
+#     pd.DataFrame
+#         Um DataFrame contendo todos os dados do endpoint requisitado.
+
+#     Exceções:
+#     ---------
+#     ValueError:
+#         Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
+#     """
+
+#     url_request = get_endpoint_url(system, tenant, endpoint, end_url_with_slash=end_url_with_slash)
+#     logger.info(f"Fetching from {url_request}")
+#     start_time = time.time()
+
+#     # Pegar numero de registros e definir tamanho da página
+#     # Para pegar o número total de registros, faz uma requisição com tamanho de página 1000
+#     FIRST_PAGE_SIZE = 1000
+#     if ignore_page_size_limits:
+#         FIRST_PAGE_SIZE = min(FIRST_PAGE_SIZE, page_size) if page_size else FIRST_PAGE_SIZE
+#     first_page_data = get_page_with_page_size(url_request, token, 1, FIRST_PAGE_SIZE)
+#     if not first_page_data or 'count' not in first_page_data:
+#         raise ValueError("Unable to fetch total pages from API response.")
+#     total_records = first_page_data['count']
+    
+#     # Ajustar o tamanho da página de acordo com os limites
+#     page_size = define_page_size(page_size, total_records, is_parallel_request=False, ignore_page_size_limits=ignore_page_size_limits)
+#     total_pages = ceil(total_records/page_size)
+#     logger.info(f"Total pages to fetch: {total_pages} - Page size: {page_size} - Total records: {total_records}")
+
+#     # Se o número total de registros for menor que o tamanho da primeira página, reusa os dados da primeira página
+#     if total_records < FIRST_PAGE_SIZE:
+#         try:
+#             result = first_page_data
+#             if result and 'results' in result:
+#                 df = pd.json_normalize(result['results'])
+#         except Exception as exc:
+#             logger.exception(f"Page 1 generated an exception: {exc}")
+#             df = pd.DataFrame()
+#     else:
+#         response_list = []
+#         for page in range(1, total_pages+1):
+#             response = get_page_with_page_size(url_request, token, page, page_size)
+#             try:
+#                 if response and 'results' in response:
+#                     data = pd.json_normalize(response, record_path='results')
+#                     response_list.append(data)
+#                 if page % 10 == 0:
+#                     logger.info(f"Page {page} fetched successfully.")
+#             except Exception as exc:
+#                 logger.exception(f"Page {page} generated an exception: {exc}")
+#         # df = pd.concat([pd.json_normalize(response, record_path='results') for response in response_list], ignore_index=True)
+#         df = pd.concat(response_list, ignore_index=True)
+
+#     elapsed_time = time.time() - start_time
+#     logger.info(f"Data fetched in {elapsed_time:.2f} seconds.")
+
+#     if 'api_url' in df.columns:
+#         if df.duplicated(subset='api_url').any():
+#             raise ValueError("ERRO: Registros duplicados retornados pela API")
+        
+#     return df
+
+def fetch_all_pages_sequential(
+    system: str,
+    tenant: str,
+    endpoint: str,
+    token: str,
+    page_size: Optional[int] = None,
+    end_url_with_slash: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Faz a requisição de todas as páginas de um endpoint específico da API e retorna os dados como um DataFrame.
+
+    Parâmetros:
+    -----------
+    system : str
+        Nome do sistema usado na composição da URL do endpoint.
+    tenant : str
+        Nome do tenant usado na composição da URL do endpoint.
+    endpoint : str
+        Nome do endpoint da API a ser acessado.
+    token : str
+        Token de autenticação necessário para acessar a API.
+    page_size : int, opcional
+        Número de itens por página. O padrão é 5000.
+    end_url_with_slash : bool, opcional
+        Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
+    ignore_page_size_limits : bool, opcional
+        Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
+
+    Retorna:
+    --------
+    pd.DataFrame
+        Um DataFrame contendo todos os dados do endpoint requisitado.
+
+    Exceções:
+    ---------
+    ValueError:
+        Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
+    """
+
+    start_time = time.time()
+
+    # Ajustar o tamanho da página de acordo com os limites
+    total_records = 1000000000 # define page size as a very large number to fetch all data in one request
+    page_size = define_page_size(page_size, total_records, is_parallel_request=False, ignore_page_size_limits=ignore_page_size_limits)
+    logger.info(f"Fetching all pages with page size: {page_size}")
+
+    page = 1
+    url_request = get_endpoint_url(system, tenant, endpoint, end_url_with_slash=end_url_with_slash, page=page, page_size=page_size)
+    logger.info(f"Fetching from {url_request}")
+
+    response_list = []
+    next_page_url: Optional[str] = url_request
+
+    while next_page_url:
+        url_request = next_page_url
+        response = get_from_url(url_request, token)
+
+        # Advance the cursor before processing results. If result handling below
+        # raises, next_page_url has already moved on, so the loop never retries the
+        # same page indefinitely. A failure in get_from_url itself (above) is not
+        # caught and terminates the fetch instead of looping.
+        if 'next' in response:
+            next_page_url = response['next']
+        else:
+            logger.warning(f"No 'next' field in response on url {url_request}; assuming last page reached.")
+            next_page_url = None
+
+        try:
+            if 'results' in response:
+                data = pd.json_normalize(response, record_path='results')
+                response_list.append(data)
+            else:
+                logger.warning(f"No 'results' field in response on url {url_request}; skipping data normalization.")
+
+            if page % 10 == 0:
+                logger.info(f"Page {page} fetched successfully.")
+        except Exception as exc:
+            logger.exception(f"Page {page} generated an exception: {exc}")
+        page += 1
+    df = pd.concat(response_list, ignore_index=True)
+
+    elapsed_time = time.time() - start_time
+    logger.info(f"Data fetched in {elapsed_time:.2f} seconds.")
+
+    if 'api_url' in df.columns:
+        if df.duplicated(subset='api_url').any():
+            raise ValueError("ERRO: Registros duplicados retornados pela API")
+        
+    return df
+
+# @title REALIZA REQUISIÇÃO DE TODAS AS PÁGINAS DE UM ENDPOINT ESPECÍFICO DE FORMA PARALELA
 def fetch_all_pages_parallel(
     system: str,
     tenant: str,
@@ -1479,95 +2039,6 @@ def fetch_all_pages_parallel(
             raise ValueError("ERRO: Registros duplicados retornados pela API")
         
     return df
-
-def fetch_all_pages_sequential(
-    system: str,
-    tenant: str,
-    endpoint: str,
-    token: str,
-    page_size: Optional[int] = None,
-    end_url_with_slash: bool = True,
-    ignore_page_size_limits: bool = False
-) -> pd.DataFrame:
-    """
-    Faz a requisição de todas as páginas de um endpoint específico da API e retorna os dados como um DataFrame.
-
-    Parâmetros:
-    -----------
-    system : str
-        Nome do sistema usado na composição da URL do endpoint.
-    tenant : str
-        Nome do tenant usado na composição da URL do endpoint.
-    endpoint : str
-        Nome do endpoint da API a ser acessado.
-    token : str
-        Token de autenticação necessário para acessar a API.
-    page_size : int, opcional
-        Número de itens por página. O padrão é 5000.
-    end_url_with_slash : bool, opcional
-        Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
-    ignore_page_size_limits : bool, opcional
-        Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
-
-    Retorna:
-    --------
-    pd.DataFrame
-        Um DataFrame contendo todos os dados do endpoint requisitado.
-
-    Exceções:
-    ---------
-    ValueError:
-        Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
-    """
-
-    start_time = time.time()
-
-    # Ajustar o tamanho da página de acordo com os limites
-    total_records = 1000000000 # define page size as a very large number to fetch all data in one request
-    page_size = define_page_size(page_size, total_records, is_parallel_request=False, ignore_page_size_limits=ignore_page_size_limits)
-    logger.info(f"Fetching all pages with page size: {page_size}")
-
-    page = 1
-    url_request = get_endpoint_url(system, tenant, endpoint, end_url_with_slash=end_url_with_slash, page=page, page_size=page_size)
-    logger.info(f"Fetching from {url_request}")
-
-    response_list = []
-    next_page_url: Optional[str] = url_request
-
-    while next_page_url:
-        url_request = next_page_url
-        response = get_from_url(url_request, token)
-
-        # Advance the cursor before processing results. If result handling below
-        # raises, next_page_url has already moved on, so the loop never retries the
-        # same page indefinitely. A failure in get_from_url itself (above) is not
-        # caught and terminates the fetch instead of looping.
-        if 'next' in response:
-            next_page_url = response['next']
-        else:
-            logger.warning(f"No 'next' field in response on url {url_request}; assuming last page reached.")
-            next_page_url = None
-
-        try:
-            if 'results' in response:
-                data = pd.json_normalize(response, record_path='results')
-                response_list.append(data)
-            else:
-                logger.warning(f"No 'results' field in response on url {url_request}; skipping data normalization.")
-
-            if page % 10 == 0:
-                logger.info(f"Page {page} fetched successfully.")
-        except Exception as exc:
-            logger.exception(f"Page {page} generated an exception: {exc}")
-        page += 1
-    df = pd.concat(response_list, ignore_index=True)
-
-    elapsed_time = time.time() - start_time
-    logger.info(f"Data fetched in {elapsed_time:.2f} seconds.")
-
-    if 'api_url' in df.columns:
-        if df.duplicated(subset='api_url').any():
-            raise ValueError("ERRO: Registros duplicados retornados pela API")
         
     return df
 
