@@ -1351,3 +1351,224 @@ def get_dataframe_from_api(
         return fetch_all_pages_parallel(system, tenant, endpoint, token, page_size, max_workers, end_url_with_slash, ignore_page_size_limits)
     else:
         return fetch_all_pages_sequential(system, tenant, endpoint, token, page_size, end_url_with_slash, ignore_page_size_limits)
+
+def fetch_all_pages_parallel(
+    system: str,
+    tenant: str,
+    endpoint: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    end_url_with_slash: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Faz a requisição de todas as páginas de um endpoint da API de forma paralela e retorna os dados como um DataFrame.
+
+    Parâmetros:
+    -----------
+    system : str
+        Nome do sistema usado na composição da URL do endpoint.
+    tenant : str
+        Nome do tenant usado na composição da URL do endpoint.
+    endpoint : str
+        Nome do endpoint da API a ser acessado.
+    token : str
+        Token de autenticação necessário para acessar a API.
+    page_size : int, opcional
+        Número de itens por página. O padrão é None (própria função decide o número ideal).
+    max_workers : int, opcional
+        Número máximo de threads paralelas usadas para fazer as requisições. O padrão é definido automaticamente pelo `ThreadPoolExecutor`.
+    end_url_with_slash : bool, opcional
+        Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
+    ignore_page_size_limits : bool, opcional
+        Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
+
+    Retorna:
+    --------
+    pd.DataFrame
+        Um DataFrame contendo todos os dados do endpoint requisitado.
+
+    Exceções:
+    ---------
+    ValueError:
+        Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
+    Exception:
+        Caso alguma página gere um erro ao ser requisitada, o erro é capturado e exibido no console.
+    """
+
+    url_request = get_endpoint_url(system, tenant, endpoint, end_url_with_slash=end_url_with_slash)
+    logger.info(f"Fetching from {url_request}")
+    start_time = time.time()
+
+    # Pegar numero de registros e definir tamanho da página
+    # Para pegar o número total de registros, faz uma requisição com tamanho de página 1000
+    FIRST_PAGE_SIZE = 1000
+    if ignore_page_size_limits:
+        FIRST_PAGE_SIZE = min(FIRST_PAGE_SIZE, page_size) if page_size else FIRST_PAGE_SIZE
+    first_page_data = get_page_with_page_size(url_request, token, 1, FIRST_PAGE_SIZE)
+    if not first_page_data or 'count' not in first_page_data:
+        raise ValueError("Unable to fetch total pages from API response.")
+    total_records = first_page_data['count']
+    # Quando uma session é usada, todas as requisições compartilham o mesmo connection pool
+    # (padrão: 10). Limitar os workers ao tamanho do pool evita o churn de conexões
+    # ("Connection pool is full, discarding connection"). O caminho por Token não é afetado.
+    session = get_option("session")
+    if session is not None:
+        pool_limit = _session_pool_limit(session)
+        max_workers = pool_limit if max_workers is None else min(max_workers, pool_limit)
+    # Ajustar o tamanho da página de acordo com os limites e otimização de paralelismo
+    page_size = define_page_size(page_size=page_size, total_records=total_records, is_parallel_request=True, num_parallel_workers=max_workers, ignore_page_size_limits=ignore_page_size_limits)
+    total_pages = ceil(total_records/page_size)
+    
+    logger.info(f"Total pages to fetch: {total_pages} - Page size: {page_size} - Total records: {total_records}")
+
+    # Se o número total de registros for menor que o tamanho da primeira página, reusa os dados da primeira página
+    if total_records < FIRST_PAGE_SIZE:
+        df = pd.DataFrame()
+        try:
+            result = first_page_data
+            if result and 'results' in result:
+                df = pd.json_normalize(result['results'])
+        except Exception as exc:
+            logger.exception(f"Page 1 generated an exception: {exc}")
+            df = pd.DataFrame()
+    elif total_pages > 0:
+        all_data = []
+        parent_context = contextvars.copy_context()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    parent_context.copy().run,
+                    get_page_with_page_size,
+                    url_request,
+                    token,
+                    page,
+                    page_size,
+                ): page
+                for page in range(1, total_pages + 1)
+            }
+            for future in as_completed(futures):
+                page = futures[future]
+                try:
+                    result = future.result()
+                    if result and 'results' in result:
+                        data = pd.json_normalize(result['results'])
+                        # if 'request_page' not in data.columns and not data.empty:
+                        #     data['request_page'] = page
+                        all_data.append(data)
+                    if page % 10 == 0:
+                        logger.info(f"Page {page} fetched successfully.")
+                except Exception as exc:
+                    logger.exception(f"Page {page} generated an exception: {exc}")
+
+        # # Convert to DataFrame
+        df = pd.concat(all_data, ignore_index=True)
+    else:
+        df = pd.DataFrame()
+    
+    elapsed_time = time.time() - start_time
+    logger.info(f"Data fetched in {elapsed_time:.2f} seconds.")
+        
+    if 'api_url' in df.columns:
+        if df.duplicated(subset='api_url').any():
+            df_duplicated = df.loc[df.duplicated(subset='api_url'), ['api_url']].copy()
+            df_duplicated = df_duplicated.sort_values(by='api_url')
+            df_duplicated['api_url'] = '...'+df_duplicated['api_url'].str[-30:]
+            logger.error(f"Duplicated records: \n{df_duplicated}")
+            raise ValueError("ERRO: Registros duplicados retornados pela API")
+        
+    return df
+
+def fetch_all_pages_sequential(
+    system: str,
+    tenant: str,
+    endpoint: str,
+    token: str,
+    page_size: Optional[int] = None,
+    end_url_with_slash: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Faz a requisição de todas as páginas de um endpoint específico da API e retorna os dados como um DataFrame.
+
+    Parâmetros:
+    -----------
+    system : str
+        Nome do sistema usado na composição da URL do endpoint.
+    tenant : str
+        Nome do tenant usado na composição da URL do endpoint.
+    endpoint : str
+        Nome do endpoint da API a ser acessado.
+    token : str
+        Token de autenticação necessário para acessar a API.
+    page_size : int, opcional
+        Número de itens por página. O padrão é 5000.
+    end_url_with_slash : bool, opcional
+        Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
+    ignore_page_size_limits : bool, opcional
+        Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
+
+    Retorna:
+    --------
+    pd.DataFrame
+        Um DataFrame contendo todos os dados do endpoint requisitado.
+
+    Exceções:
+    ---------
+    ValueError:
+        Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
+    """
+
+    start_time = time.time()
+
+    # Ajustar o tamanho da página de acordo com os limites
+    total_records = 1000000000 # define page size as a very large number to fetch all data in one request
+    page_size = define_page_size(page_size, total_records, is_parallel_request=False, ignore_page_size_limits=ignore_page_size_limits)
+    logger.info(f"Fetching all pages with page size: {page_size}")
+
+    page = 1
+    url_request = get_endpoint_url(system, tenant, endpoint, end_url_with_slash=end_url_with_slash, page=page, page_size=page_size)
+    logger.info(f"Fetching from {url_request}")
+
+    response_list = []
+    next_page_url: Optional[str] = url_request
+
+    while next_page_url:
+        url_request = next_page_url
+        response = get_from_url(url_request, token)
+
+        # Advance the cursor before processing results. If result handling below
+        # raises, next_page_url has already moved on, so the loop never retries the
+        # same page indefinitely. A failure in get_from_url itself (above) is not
+        # caught and terminates the fetch instead of looping.
+        if 'next' in response:
+            next_page_url = response['next']
+        else:
+            logger.warning(f"No 'next' field in response on url {url_request}; assuming last page reached.")
+            next_page_url = None
+
+        try:
+            if 'results' in response:
+                data = pd.json_normalize(response, record_path='results')
+                response_list.append(data)
+            else:
+                logger.warning(f"No 'results' field in response on url {url_request}; skipping data normalization.")
+
+            if page % 10 == 0:
+                logger.info(f"Page {page} fetched successfully.")
+        except Exception as exc:
+            logger.exception(f"Page {page} generated an exception: {exc}")
+        page += 1
+    df = pd.concat(response_list, ignore_index=True)
+
+    elapsed_time = time.time() - start_time
+    logger.info(f"Data fetched in {elapsed_time:.2f} seconds.")
+
+    if 'api_url' in df.columns:
+        if df.duplicated(subset='api_url').any():
+            raise ValueError("ERRO: Registros duplicados retornados pela API")
+        
+    return df
+
+
