@@ -1,403 +1,47 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import requests
 import time
-import io
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pandas import json_normalize
+
+# Importando todas as lógicas do nosso arquivo de funções
+from validador_functions import *
 
 # =============================================================================
-# IMPORTAÇÕES DO PACOTE MINDSIGHT
+# CONFIGURAÇÃO DA PÁGINA STREAMLIT
 # =============================================================================
-from mindsight_api_requests.wrappers.auth import *
-from mindsight_api_requests.wrappers.hub import *
-from mindsight_api_requests.wrappers.controle import *
+st.set_page_config(
+    page_title="Gestão de Acessos | Mindsight", 
+    page_icon="mindsight-logo.png", 
+    layout="wide"
+)
 
-# =============================================================================
-# FUNÇÕES AUXILIARES E API 
-# =============================================================================
-def gerar_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Planilha1')
-    return output.getvalue()
-
-def gerar_excel_multi_abas(dict_dfs):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        for nome_aba, df in dict_dfs.items():
-            df.to_excel(writer, index=False, sheet_name=nome_aba)
-    return output.getvalue()
-
-def ler_csv_seguro(uploaded_file):
-    uploaded_file.seek(0)
-    try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
-    except Exception:
-        uploaded_file.seek(0)
-        df = pd.read_csv(uploaded_file, sep=';', encoding='latin1')
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
-
-def fetch_data_with_pagination(url, headers, page_size=1000):
-    results = []
-    current_url = url
-    while current_url:
-        response = requests.get(current_url, headers=headers)
-        if response.status_code != 200:
-            st.error(f"Erro ao acessar {current_url}: {response.status_code}")
-            break
-        data = response.json()
-        results.extend(data.get('results', []))
-        current_url = data.get('next')
-    return results
-
-def func_api_get_base_parallel(sistema, client, token, endpoint, ids=None, group_param=None, page_size=1000, extra_param=None):
-    headers = {'Authorization': f'Token {token}'}
-    base_url = f'https://{sistema}.mindsight.com.br/{client}/api/v1/{endpoint}/?page_size={page_size}'
-    if extra_param:
-        base_url += extra_param
-
-    def fetch_data(url):
-        return fetch_data_with_pagination(url, headers, page_size)
-
-    if ids and group_param:
-        urls = [f"{base_url}&{group_param}={id_}" for id_ in ids]
-    else:
-        urls = [base_url]
-
-    all_results = []
-    with ThreadPoolExecutor() as executor:
-        future_to_url = {executor.submit(fetch_data, url): url for url in urls}
-        for future in as_completed(future_to_url):
-            try:
-                results = future.result()
-                all_results.extend(results)
-            except Exception as e:
-                pass 
-
-    return pd.DataFrame(json_normalize(all_results))
-
-def ler_usuarios_full(cliente, token_full):
-    return func_api_get_base_parallel('full', cliente, token_full, 'users')
-
-def ler_usuarios_controle(cliente, token_controle):
-    return func_api_get_base_parallel('controle', cliente, token_controle, 'users')
-
-def ler_usuarios_performance(cliente, token_performance, rodada):
-    return func_api_get_base_parallel('performance', cliente, token_performance, 'participants', extra_param = f'&evaluation_rounds={rodada}')
-
-def ler_perfomance_evaluation_rounds(cliente, token_performance):
-    return func_api_get_base_parallel('performance', cliente, token_performance, 'evaluation_rounds')
-
-def extrair_django_admin(url_base, cookies):
-    sessao = requests.Session()
-    requests.utils.add_dict_to_cookiejar(sessao.cookies, cookies)
-    pagina = 0
-    usuarios = []
-    ultima_primeira_linha = None
-    
-    while True:
-        resposta = sessao.get(f"{url_base}?p={pagina}")
-        if "login" in resposta.url:
-            st.error("A sessão expirou. Faça login novamente na barra lateral.")
-            return pd.DataFrame()
-            
-        soup = BeautifulSoup(resposta.text, 'html.parser')
-        tabela = soup.select_one("#result_list tbody")
-        
-        if not tabela: break
-        linhas = tabela.find_all("tr")
-        if not linhas: break
-        
-        primeira_linha_atual = str(linhas[0])
-        if primeira_linha_atual == ultima_primeira_linha: break
-        ultima_primeira_linha = primeira_linha_atual
-        
-        for linha in linhas:
-            username_elem = linha.select_one(".field-username") or linha.select_one("th a")
-            email_elem = linha.select_one(".field-email")
-            first_name_elem = linha.select_one(".field-first_name")
-            last_name_elem = linha.select_one(".field-last_name")
-            is_active_img = linha.select_one(".field-is_active img")
-            uuid_elem = linha.select_one(".field-uuid")
-            
-            usuarios.append({
-                'username': username_elem.text.strip() if username_elem else "",
-                'first_name': first_name_elem.text.strip() if first_name_elem else "",
-                'last_name': last_name_elem.text.strip() if last_name_elem else "",
-                'email': email_elem.text.strip() if email_elem else "",
-                'is_active': 1 if is_active_img and is_active_img.get('alt') == 'True' else 0,
-                'uuid': uuid_elem.text.strip() if uuid_elem else ""
-            })
-        pagina += 1
-        
-    df = pd.DataFrame(usuarios)
-    return df.drop_duplicates() if not df.empty else df
-
-def extrair_django_admin_users_com_id(url_base, cookies):
-    """Extrai utilizadores e o respetivo ID da URL para cruzamento seguro."""
-    sessao = requests.Session()
-    requests.utils.add_dict_to_cookiejar(sessao.cookies, cookies)
-    pagina = 0
-    usuarios = []
-    ultima_primeira = None
-    
-    while True:
-        r = sessao.get(f"{url_base}?p={pagina}")
-        if "login" in r.url: return pd.DataFrame()
-        soup = BeautifulSoup(r.text, 'html.parser')
-        tabela = soup.select_one("#result_list tbody")
-        
-        if not tabela: break
-        linhas = tabela.find_all("tr")
-        if not linhas: break
-        if str(linhas[0]) == ultima_primeira: break
-        ultima_primeira = str(linhas[0])
-        
-        for linha in linhas:
-            username_elem = linha.select_one(".field-username") or linha.select_one("th a")
-            email_elem = linha.select_one(".field-email")
-            
-            user_id = ''
-            if username_elem and username_elem.name == 'a':
-                href = username_elem.get('href', '')
-                if len(href.split('/')) >= 3: user_id = href.split('/')[-3]
-            elif linha.select_one("th a"):
-                href = linha.select_one("th a").get('href', '')
-                if len(href.split('/')) >= 3: user_id = href.split('/')[-3]
-                
-            usuarios.append({
-                'id_user': str(user_id),
-                'username': username_elem.text.strip() if username_elem else "",
-                'email': email_elem.text.strip() if email_elem else ""
-            })
-        pagina += 1
-        
-    df = pd.DataFrame(usuarios)
-    if not df.empty: df = df.drop_duplicates()
-    return df
-
-# =============================================================================
-# SCRAPING PERFORMANCE (ADAPTADO DO CÓDIGO ORIGINAL DO USUÁRIO)
-# =============================================================================
-def scrapePerformanceParticipant(link, wait, driver):
-    """Lógica exata de extração da página do participante via Selenium (Edge)."""
-    driver.get(link)
-    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-
-    try: uuid = driver.find_element(By.XPATH, '//*[@id="id_uuid"]').get_attribute("value")
-    except: uuid = ""
-    
-    try: name = driver.find_element(By.XPATH, '//*[@id="id_name"]').get_attribute("value")
-    except: name = ""
-    
-    try: key = driver.find_element(By.XPATH, '//*[@id="id_key"]').get_attribute("value")
-    except: key = ""
-    
-    try: id_user = driver.find_element(By.XPATH, '//*[@id="id_user"]').get_attribute("value")
-    except: id_user = ""
-
-    page_data = {
-        "link": link,
-        "UUID_Perf": uuid,
-        "name": name,
-        "employee_code": key,
-        "user_id": id_user,
+# ==========================================
+# INJEÇÃO DE CSS (TEMA MINDSIGHT)
+# ==========================================
+st.markdown("""
+    <style>
+    .stApp { background-color: #09030f; color: #ffffff; }
+    header[data-testid="stHeader"] { background-color: transparent !important; }
+    [data-testid="stSidebar"] { background-color: #120520 !important; }
+    div.stButton > button:first-child {
+        background: linear-gradient(90deg, #6200ea 0%, #b500ff 100%);
+        color: white; border: none; border-radius: 6px; font-weight: bold;
     }
-    return page_data
+    div.stButton > button:first-child:hover {
+        background: linear-gradient(90deg, #b500ff 0%, #6200ea 100%);
+    }
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
+    .stTabs [data-baseweb="tab"] { color: #b0b0b0; }
+    .stTabs [aria-selected="true"] { color: #b500ff !important; border-bottom-color: #b500ff !important; }
+    </style>
+""", unsafe_allow_html=True)
 
-def extrair_performance_selenium_original(tenant, cookies, progress_bar=None):
-    """Navegação de página a página para extração usando Selenium (Edge)."""
-    options = webdriver.EdgeOptions()
-    driver = webdriver.Edge(options=options)
-    
-    driver.get(f"https://performance.mindsight.com.br/{tenant}/staff/")
-    time.sleep(1)
-    
-    for name, value in cookies.items():
-        driver.add_cookie({'name': name, 'value': value})
-        
-    base_url = f"https://performance.mindsight.com.br/{tenant}/staff/participants/participant/"
-    wait = WebDriverWait(driver, 10)
-    
-    extracted_data = []
-    page = 0
-    
-    try:
-        while True:
-            if progress_bar: progress_bar.text(f"Scraping Performance: Analisando tabela da página {page}...")
-            driver.get(f"{base_url}?p={page}")
-            
-            while "login" in driver.current_url or "mfa" in driver.current_url or "otp" in driver.current_url:
-                time.sleep(1)
-                
-            try:
-                wait.until(EC.presence_of_element_located((By.ID, "result_list")))
-                rows = driver.find_elements(By.CSS_SELECTOR, "#result_list tbody tr")
-                if not rows: break 
-                
-                links = []
-                for row in rows:
-                    try:
-                        header_cell = row.find_element(By.TAG_NAME, "th")
-                        link_element = header_cell.find_element(By.TAG_NAME, "a")
-                        links.append(link_element.get_attribute("href"))
-                    except: pass
-                    
-                for i, link in enumerate(links):
-                    while "login" in driver.current_url: time.sleep(1)
-                    
-                    page_data = scrapePerformanceParticipant(link, wait, driver)
-                    extracted_data.append(page_data)
-                    
-                    if progress_bar:
-                        progress_bar.progress(min(int(((i+1)/len(links))*100), 100), text=f"Página {page} - Extraindo participante {i+1}/{len(links)}...")
-                        
-                page += 1
-            except:
-                break
-    except Exception as e:
-        print(f"Error occurred: {e}")
-            
-    driver.quit()
-    colunas_seguras = ['employee_code', 'UUID_Perf', 'user_id', 'name']
-    if not extracted_data: return pd.DataFrame(columns=colunas_seguras)
-    return pd.DataFrame(extracted_data)
-
-def formatar_acessos_duplo(row, opcao, lista_controle, tem_token_full, validacao):
-    valor_atual = row.get('access_to_systems', row.get('access_to_systems_auth', ''))
-    sou_gestor = row['sou_gestor']
-    is_active_full = row['is_active_full']
-    is_active_auth = row['is_active'] 
-    username = str(row['username']).strip()
-
-    if pd.isna(valor_atual) or str(valor_atual).lower() == 'nan' or str(valor_atual) == '':
-        lista_atual = []
-    else:
-        limpo = str(valor_atual).replace("'", "").replace('"', "").replace(" ", "").lower()
-        lista_atual = [s.strip() for s in limpo.split(',') if s.strip()]
-
-    lista_csv1 = lista_atual.copy()
-    lista_csv2 = None
-    motivos = []
-
-    precisa_ativar = is_active_auth not in [1, '1', True, 'True', 1.0]
-    if precisa_ativar: motivos.append('ativar usuario inativo')
-
-    precisa_metas = validacao in ['Validação padrão (metas, perfomance)', 'Validar somente metas']
-    precisa_performance = validacao in ['Validação padrão (metas, perfomance)', 'Validar somente performance']
-
-    if precisa_metas and 'metas' not in lista_csv1:
-        lista_csv1.append('metas')
-        motivos.append('faltava metas')
-    
-    if precisa_performance and 'performance' not in lista_csv1:
-        lista_csv1.append('performance')
-        motivos.append('faltava performance')
-
-    if lista_controle: 
-        if username in lista_controle:
-            if 'organograma' not in lista_csv1:
-                lista_csv1.append('organograma')
-                motivos.append('adicionar organograma')
-        else:
-            if 'organograma' in lista_csv1:
-                lista_csv1.remove('organograma')
-                motivos.append('remover organograma')
-
-    if tem_token_full:
-        tem_full_na_string = 'full' in lista_csv1
-        alvo_da_regra_full = False
-        if opcao == 'Todos os usuários': alvo_da_regra_full = True
-        elif opcao == 'Gestores' and sou_gestor: alvo_da_regra_full = True
-
-        if alvo_da_regra_full:
-            if not is_active_full:
-                if tem_full_na_string:
-                    lista_csv1.remove('full')
-                    motivos.append('remover full para trick de reativacao')
-                else:
-                    motivos.append('faltava full (enviado direto para o trick)')
-                lista_csv2 = lista_csv1.copy()
-                lista_csv2.append('full')
-            else:
-                if not tem_full_na_string:
-                    lista_csv1.append('full')
-                    motivos.append('faltava full')
-
-    str_atual = ",".join(lista_atual)
-    str_csv1 = ",".join(lista_csv1)
-    str_csv2 = ",".join(lista_csv2) if lista_csv2 is not None else str_csv1
-    motivo_final = "; ".join(motivos)
-
-    teve_mudanca_csv1 = (str_atual != str_csv1) or precisa_ativar
-    teve_mudanca_csv2 = str_csv1 != str_csv2
-
-    return pd.Series([str_csv1, str_csv2, teve_mudanca_csv1, teve_mudanca_csv2, motivo_final])
-
-def formatar_acesso_performance(row):
-    if row['_merge'] == 'left_only':
-        return pd.Series(['', False, 'Usuário não encontrado na base do Auth baixada'])
-        
-    motivos = []
-    is_active = row['is_active']
-    access = row['access_to_systems']
-    
-    precisa_ativar = is_active not in [1, '1', True, 'True', 1.0]
-    if precisa_ativar:
-        motivos.append('ativar usuario inativo')
-        
-    if pd.isna(access) or str(access).strip() == '':
-        lista_atual = []
-    else:
-        limpo = str(access).replace("'", "").replace('"', "").replace(" ", "").lower()
-        lista_atual = [s.strip() for s in limpo.split(',') if s.strip()]
-        
-    lista_nova = lista_atual.copy()
-    if 'performance' not in lista_nova:
-        lista_nova.append('performance')
-        motivos.append('faltava performance')
-        
-    precisa_ajuste = precisa_ativar or ('faltava performance' in motivos)
-    str_nova = ",".join(lista_nova)
-    motivo_final = "; ".join(motivos)
-    
-    return pd.Series([str_nova, precisa_ajuste, motivo_final])
-
-def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False):
-    df_upload = pd.DataFrame()
-    df_upload['vazio'] = np.nan
-    df_upload['id'] = df_base['id']
-    df_upload['username'] = df_base['username']
-    df_upload['email'] = df_base['email']
-    df_upload['first_name'] = df_base['first_name']
-    df_upload['last_name'] = df_base['last_name']
-    df_upload['login_AD'] = 0
-    df_upload['ad_only'] = 0
-    df_upload['password'] = ''
-    df_upload['is_staff'] = 0
-    df_upload['groups'] = '1,2'
-    df_upload['is_active'] = 1 
-    df_upload['access_to_systems'] = df_base[coluna_acessos]
-    df_upload['is_superuser'] = df_base['is_superuser'].map({True: 1, 'True': 1, False: 0, 'False': 0}).fillna(0).astype(int)
-    
-    if incluir_motivo:
-        df_upload['motivo_ajuste'] = df_base['motivo']
-    return df_upload
-
-# =============================================================================
-# CONFIGURAÇÃO DA PÁGINA STREAMLIT E INICIALIZAÇÃO BLINDADA (SESSION STATE)
-# =============================================================================
-st.set_page_config(page_title="Gestão de Acessos", layout="wide")
+st.sidebar.image("preview_mind.png", use_container_width=True)
 st.title("Gestão de Acessos Mindsight")
 
+# =============================================================================
+# INICIALIZAÇÃO BLINDADA (SESSION STATE)
+# =============================================================================
 chaves_memoria = {
     'cookies_sessao': None,
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "",
@@ -406,13 +50,7 @@ chaves_memoria = {
     't3_df_desligados': pd.DataFrame(), 't3_len_total': 0, 't3_qtd_mindsight': 0, 't3_tenant': "",
     't4_processed': False, 't4_tenant': "", 't4_val1_ok': pd.DataFrame(), 't4_val1_faltantes': pd.DataFrame(), 
     't4_val2': pd.DataFrame(), 't4_val3': pd.DataFrame(), 't4_val4': pd.DataFrame(),
-    
-    # SISTEMA DE CACHE DE BOTÕES ABA 5
-    't5_tenant': "",
-    't5_df_ctrl': pd.DataFrame(),
-    't5_df_hub': pd.DataFrame(),
-    't5_df_metas_users': pd.DataFrame(),
-    't5_final': pd.DataFrame()
+    't5_tenant': "", 't5_df_ctrl': pd.DataFrame(), 't5_df_hub': pd.DataFrame(), 't5_df_metas_users': pd.DataFrame(), 't5_final': pd.DataFrame()
 }
 
 for chave, valor in chaves_memoria.items():
@@ -420,7 +58,7 @@ for chave, valor in chaves_memoria.items():
         st.session_state[chave] = valor
 
 # =============================================================================
-# BARRA LATERAL: AUTENTICAÇÃO SCRAPING (IDÊNTICO AO ORIGINAL)
+# BARRA LATERAL: AUTENTICAÇÃO SCRAPING
 # =============================================================================
 st.sidebar.header("🔐 Autenticação Mindsight")
 st.sidebar.markdown("Necessário para Metas e Performance (Abas 4 e 5).")
@@ -484,13 +122,8 @@ with tab1:
                 bar.progress(30, text="Obtendo Registos do Controle...")
                 reg_funcionarios_controle = get_controle_employee_records_api(tenant_t1, token_controle_t1)
                 
-                gestores_funcionario_controle = pd.DataFrame()
-                if acesso_full_t1 == 'Gestores':
-                    gestores_funcionario_controle = get_controle_employee_managers_api(tenant_t1, token_controle_t1)
-
-                df_usuarios_full = pd.DataFrame()
-                if token_full_t1:
-                    df_usuarios_full = ler_usuarios_full(tenant_t1, token_full_t1)
+                gestores_funcionario_controle = get_controle_employee_managers_api(tenant_t1, token_controle_t1) if acesso_full_t1 == 'Gestores' else pd.DataFrame()
+                df_usuarios_full = ler_usuarios_full(tenant_t1, token_full_t1) if token_full_t1 else pd.DataFrame()
 
                 bar.progress(60, text="Cruzando dados e validando acessos...")
                 reg_funcionarios_controle['start'] = pd.to_datetime(reg_funcionarios_controle['start'], errors='coerce')
@@ -524,10 +157,7 @@ with tab1:
                 else:
                     df_validacao['is_active_full'] = True
 
-                if not df_gestores_ativos.empty:
-                    df_validacao['sou_gestor'] = df_validacao['employee_code'].isin(df_gestores_ativos['manager_code'].dropna().unique())
-                else:
-                    df_validacao['sou_gestor'] = False
+                df_validacao['sou_gestor'] = df_validacao['employee_code'].isin(df_gestores_ativos['manager_code'].dropna().unique()) if not df_gestores_ativos.empty else False
 
                 bar.progress(90, text="A gerar ficheiros de correção...")
                 df_add_acessos = df_usuarios_auth_limpo.merge(df_validacao[['username', 'sou_gestor', 'is_active_full']], on='username', how='inner').copy()
