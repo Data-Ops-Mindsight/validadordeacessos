@@ -2,28 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
-import subprocess
-import sys
 
-# ==========================================
-# INSTALAÇÃO DINÂMICA DA BIBLIOTECA PRIVADA
-# ==========================================
-try:
-    import mindsight_api_requests
-except ImportError:
-    # Tenta instalar apenas se a biblioteca ainda não estiver no ambiente
-    if "GITHUB_TOKEN" in st.secrets:
-        token = st.secrets["GITHUB_TOKEN"]
-        # Use a conta correta identificada no seu erro (Data-Ops-Mindsight)
-        repo_url = f"git+https://{token}@github.com/Data-Ops-Mindsight/mindsight_api_requests.git"
-        
-        with st.spinner("A instalar dependências privadas..."):
-            subprocess.check_call([sys.executable, "-m", "pip", "install", repo_url])
-    else:
-        st.error("🚨 GITHUB_TOKEN não encontrado nos Secrets do Streamlit!")
-        st.stop()
-
-# Importando todas as lógicas do nosso arquivo de funções após garantir a instalação
+# Importando todas as lógicas do nosso arquivo de funções
 from validador_functions import *
 
 # =============================================================================
