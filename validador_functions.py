@@ -1191,4 +1191,163 @@ def get_controle_employee_tasks_api(
         df_employee_tasks_api = pd.DataFrame(columns=standard_columns)
     return df_employee_tasks_api
 
+def get_dataframe_from_api(
+    system: str,
+    tenant: str,
+    endpoint: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    end_url_with_slash: bool = True,
+    ignore_page_size_limits: bool = False,
+    **kwargs: Any
+) -> pd.DataFrame:
+    """
+    Faz a requisição de todas as páginas de um endpoint da API e retorna os dados como um DataFrame.
 
+    Parâmetros:
+    -----------
+    system : str
+        Nome do sistema usado na composição da URL do endpoint.
+    tenant : str
+        Nome do tenant usado na composição da URL do endpoint.
+    endpoint : str
+        Nome do endpoint da API a ser acessado.
+    token : str
+        Token de autenticação necessário para acessar a API.
+    page_size : int, opcional
+        Número de itens por página. O padrão é None (própria função decide o número ideal).
+    max_workers : int, opcional
+        Número máximo de threads paralelas usadas para fazer as requisições. O padrão é definido automaticamente pelo `ThreadPoolExecutor`.
+    parallel : bool, opcional
+        Define se as requisições serão feitas de forma paralela ou sequencial. O padrão é `True`.
+    end_url_with_slash : bool, opcional
+        Define se a URL da requisição vai terminar com um "/" ou não (padrão: True).
+    ignore_page_size_limits : bool, opcional
+        Define se o page_size definido pode ir além dos limites considerados seguros ([2000, 1000]) (padrão: False).
+
+    Retorna:
+    --------
+    pd.DataFrame
+        Um DataFrame contendo todos os dados do endpoint requisitado.
+
+    Exceções:
+    ---------
+    ValueError:
+        Levantada se a resposta inicial da API não contém informações sobre o número total de páginas.
+    Exception:
+        Caso alguma página gere um erro ao ser requisitada, o erro é capturado e exibido no console.
+    """
+    if endpoint.endswith('/'):
+        endpoint = endpoint[:-1]
+    if endpoint.startswith('/'):
+        endpoint = endpoint[1:]
+
+    # Casos de endpoints específicos que fogem do padrão de requisição
+    # AUTH
+    if endpoint == 'user_system_access' and system == 'auth':
+        page_size = 10 # Por algum motivo, o limite de page_size para esse endpoint é 10
+        ignore_page_size_limits = True
+    if endpoint == 'mindsight_systems' and system == 'auth':
+        return get_auth_mindsight_systems(tenant, token)
+    # FULL
+    elif endpoint == 'people/export_info' and system == 'full':
+        return get_full_people_export_info(tenant, token)
+    elif endpoint == 'contract_types' and system == 'full':
+        return get_full_contract_types(tenant, token)
+    elif endpoint == 'system_settings' and system == 'full':
+        return get_full_system_settings(tenant, token)
+    elif endpoint.startswith('surveys/get_overview_data') and system == 'full':
+        survey_id = kwargs['survey_id'] if 'survey_id' in kwargs else 0
+        instance_id = kwargs['instance_id'] if 'instance_id' in kwargs else 0
+        instance_type = cast(Literal['person', 'area'], kwargs.get('instance_type', 'person'))
+        return get_full_survey_overview_data(tenant, token, survey_id, instance_id, instance_type)
+    # HUB
+    elif endpoint == 'people/export_info' and system == 'hub':
+        return get_hub_people_export_info(tenant, token)
+    elif endpoint == 'contract_types' and system == 'hub':
+        return get_hub_contract_types(tenant, token)
+    elif endpoint == 'system_settings' and system == 'hub':
+        return get_hub_system_settings(tenant, token)
+    elif endpoint.startswith('surveys/get_overview_data') and system == 'hub':
+        survey_id = kwargs['survey_id'] if 'survey_id' in kwargs else 0
+        instance_id = kwargs['instance_id'] if 'instance_id' in kwargs else 0
+        instance_type = cast(Literal['person', 'area'], kwargs.get('instance_type', 'person'))
+        return get_hub_survey_overview_data(tenant, token, survey_id, instance_id, instance_type)
+    # CONTROLE
+    # PERFORMANCE
+    elif endpoint.startswith('participant_evaluation_round') and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_participant_evaluation_round(tenant, token, endpoint, evaluation_round, parallel)
+    elif endpoint.startswith('question_set_in_round') and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_question_set_in_round(tenant, token, evaluation_round)
+    elif endpoint.startswith('participant_question_module') and system == 'performance':
+        evaluation_group = kwargs['evaluation_group'] if 'evaluation_group' in kwargs else None
+        return get_performance_participant_question_module(tenant, token, evaluation_group, page_size, max_workers, parallel)
+    elif 'individual_suggestion_status' in endpoint and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_individual_suggestion_status(tenant, token, evaluation_round, page_size, max_workers, parallel)
+    elif 'individual_evaluation_status' in endpoint and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_individual_evaluation_status(tenant, token, evaluation_round, page_size, max_workers, parallel)
+    elif endpoint.startswith('choice_answers') and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_choice_answers(tenant, token, evaluation_round, page_size, max_workers, parallel)
+    elif endpoint.startswith('open_answers') and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_open_answers(tenant, token, evaluation_round, page_size, max_workers, parallel)
+    elif endpoint.startswith('result_scores') and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_result_scores(tenant, token, evaluation_round, page_size, max_workers, parallel)
+    elif ('extra_scores' in endpoint or 'export_notes' in endpoint) and system == 'performance':
+        evaluation_round = kwargs['evaluation_round'] if 'evaluation_round' in kwargs else None
+        return get_performance_extra_scores(tenant, token, endpoint, evaluation_round)
+    # METAS/PDI
+    elif endpoint == 'goal/cycle' and system == 'acompanhamento':
+        return get_acompanhamento_goal_cycle(tenant, token)
+    elif 'numeric_goals' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_numeric_goals(tenant, token, cycle, page_size, max_workers, parallel)
+    elif 'project_goals' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_project_goals(tenant, token, cycle, page_size, max_workers, parallel)
+    elif 'numeric_follow_up_point_results' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_numeric_follow_up_point_results(tenant, token, cycle, page_size, max_workers, parallel)
+    elif 'people_final_and_partial_scores' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_people_final_and_partial_scores(tenant, token, cycle, page_size, max_workers, parallel)
+    elif endpoint == 'pdi/cycle' and system == 'acompanhamento':
+        return get_acompanhamento_pdi_cycle(tenant, token)
+    elif 'career_goals' in endpoint and 'pdi' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_pdi_career_goals(tenant, token, cycle)
+    elif 'goals_tasks' in endpoint and 'pdi' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_pdi_people_goals_tasks(tenant, token, cycle)
+    elif 'goals' in endpoint and 'pdi' in endpoint and system == 'acompanhamento':
+        cycle = kwargs['cycle'] if 'cycle' in kwargs else None
+        return get_acompanhamento_pdi_people_goals(tenant, token, cycle)
+    # PESQUISA
+    elif endpoint == 'contact_admin' and system == 'pesquisa':
+        page_size = 500 # Por algum motivo, o limite de page_size para esse endpoint é 500
+        ignore_page_size_limits = True
+    elif endpoint == 'survey_admin' and system == 'pesquisa':
+        survey_id = kwargs['survey_id'] if 'survey_id' in kwargs else None
+        return get_pesquisa_survey(tenant, token, survey_id, page_size, max_workers, parallel, ignore_page_size_limits)
+    elif 'campaigns' in endpoint and 'export_info' in endpoint and system == 'pesquisa':
+        campaign_id = kwargs['campaign_id'] if 'campaign_id' in kwargs else None
+        return get_pesquisa_campaign_info(tenant, token, campaign_id)
+    elif 'campaigns' in endpoint and 'export_campaign_contacts' in endpoint and system == 'pesquisa':
+        campaign_id = kwargs['campaign_id'] if 'campaign_id' in kwargs else None
+        return get_pesquisa_campaign_contacts(tenant, token, campaign_id)
+    elif False: # Adicionar mais casos de endpoints específicos quando necessário
+        pass
+    
+    # Caso geral
+    if parallel:
+        return fetch_all_pages_parallel(system, tenant, endpoint, token, page_size, max_workers, end_url_with_slash, ignore_page_size_limits)
+    else:
+        return fetch_all_pages_sequential(system, tenant, endpoint, token, page_size, end_url_with_slash, ignore_page_size_limits)
