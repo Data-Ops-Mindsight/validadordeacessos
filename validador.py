@@ -15,9 +15,9 @@ from pandas import json_normalize
 # =============================================================================
 # IMPORTAÇÕES DO PACOTE MINDSIGHT
 # =============================================================================
-from mindsight_api_requests.wrappers.auth import *
-from mindsight_api_requests.wrappers.hub import *
-from mindsight_api_requests.wrappers.controle import *
+#from mindsight_api_requests.wrappers.auth import *
+#from mindsight_api_requests.wrappers.hub import *
+#from mindsight_api_requests.wrappers.controle import *
 
 # =============================================================================
 # FUNÇÕES AUXILIARES E API 
