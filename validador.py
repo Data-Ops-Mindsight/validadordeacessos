@@ -16,22 +16,29 @@ st.set_page_config(
 )
 
 # ==========================================
-# INJEÇÃO DE CSS (TEMA MINDSIGHT)
+# INJEÇÃO DE CSS (COMPLEMENTO AO TEMA CLARO)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #09030f; color: #ffffff; }
+    /* O fundo e texto principais agora são controlados pelo config.toml */
     header[data-testid="stHeader"] { background-color: transparent !important; }
-    [data-testid="stSidebar"] { background-color: #120520 !important; }
+    
+    /* Estilização dos Botões */
     div.stButton > button:first-child {
         background: linear-gradient(90deg, #6200ea 0%, #b500ff 100%);
-        color: white; border: none; border-radius: 6px; font-weight: bold;
+        color: white; 
+        border: none; 
+        border-radius: 6px; 
+        font-weight: bold;
     }
     div.stButton > button:first-child:hover {
         background: linear-gradient(90deg, #b500ff 0%, #6200ea 100%);
+        color: white;
     }
+    
+    /* Estilização das Abas (Tabs) para o modo claro */
     .stTabs [data-baseweb="tab-list"] { gap: 20px; }
-    .stTabs [data-baseweb="tab"] { color: #b0b0b0; }
+    .stTabs [data-baseweb="tab"] { color: #555555; }
     .stTabs [aria-selected="true"] { color: #b500ff !important; border-bottom-color: #b500ff !important; }
     </style>
 """, unsafe_allow_html=True)
