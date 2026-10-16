@@ -344,3 +344,851 @@ def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False):
     
     if incluir_motivo: df_upload['motivo_ajuste'] = df_base['motivo']
     return df_upload
+    
+def get_controle_users_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos usuários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos usuários do sistema Controle.
+    """
+    standard_columns = ['id','username','email','first_name','last_name','is_superuser','is_staff','is_active','last_login','uuid','date_joined','name']
+    df_users_api = get_dataframe_from_api('controle', tenant, 'users', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_users_api.empty:
+        df_users_api = pd.DataFrame(columns=standard_columns)
+    else:        
+        df_users_api['name'] = df_users_api['first_name'] + ' ' + df_users_api['last_name']
+    return df_users_api
+
+def get_controle_employees_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos funcionários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos funcionários do sistema Controle.
+    """
+    standard_columns = ['id', 'name', 'first_name', 'last_name', 'email', 'user.username', 'username', 'employee_code', 'gender', 'cpf', 'birth_date', 'company_referal', 'work_type', 'work_city', 'uuid']
+    df_employees_api = get_dataframe_from_api('controle', tenant, 'employees/?expand=user,uuid', token, page_size, max_workers, parallel, end_url_with_slash=False, ignore_page_size_limits=ignore_page_size_limits)
+    if df_employees_api.empty:
+        df_employees_api = pd.DataFrame(columns=standard_columns)
+    else:        
+        df_employees_api['name'] = df_employees_api['first_name'] + ' ' + df_employees_api['last_name']
+        df_employees_api['employee_code'] = df_employees_api['employee_code'].astype(str)
+        df_employees_api = df_employees_api.loc[:,~df_employees_api.columns.str.startswith('_')]
+    return df_employees_api
+
+def get_controle_corporations_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das instâncias de empresa do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações das empresas do sistema Controle.
+    """
+    standard_columns = ['id', 'name', 'code']
+    df_corporations_api = get_dataframe_from_api('controle', tenant, 'corporations', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_corporations_api.empty:
+        df_corporations_api = pd.DataFrame(columns=standard_columns)
+    return df_corporations_api
+
+def get_controle_branch_corporations_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das instâncias de filial do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações das filiais do sistema Controle.
+    """
+    standard_columns = ['id', 'name', 'code', 'corporation']
+    df_branch_corporations_api = get_dataframe_from_api('controle', tenant, 'branch_corporations', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_branch_corporations_api.empty:
+        df_branch_corporations_api = pd.DataFrame(columns=standard_columns)
+    return df_branch_corporations_api
+
+def get_controle_contract_types_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos tipos de contrato do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos tipos de contrato do sistema Controle.
+    """
+    standard_columns = ['id', 'description', 'key', 'contract']
+    df_contract_types_api = get_dataframe_from_api('controle', tenant, 'contract_types', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_contract_types_api.empty:
+        df_contract_types_api = pd.DataFrame(columns=standard_columns)
+    return df_contract_types_api
+
+def get_controle_employee_records_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém registros de funcionários do sistema Controle via API, incluindo informações relacionadas.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com registros de funcionários do sistema Controle, enriquecido com informações de funcionários, empresas, filiais e tipos de contrato.
+    """
+    standard_columns = ['employee_code', 'corporation_code', 'branch_corporation_code', 'contract_type', 'start', 'end', 'id', 'registration_code', 'termination_type', 'termination_reason', 'entrance_type', 'uuid', 'email', 'corporation']
+    df_employee_records_api = get_dataframe_from_api('controle', tenant, 'employee_records', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_employee_records_api.empty:
+        df_employee_records_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_employees_api = get_controle_employees_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_corporations_api = get_controle_corporations_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_branch_corporations_api = get_controle_branch_corporations_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_contract_types_api = get_controle_contract_types_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+
+        df_employee_records_api['employee'] = df_employee_records_api['employee'].apply(get_ID_from_url)
+        df_employee_records_api['corporation'] = df_employee_records_api['corporation'].apply(get_ID_from_url).astype('Int64')
+        df_employee_records_api['branch_corporation'] = df_employee_records_api['branch_corporation'].apply(get_ID_from_url).astype('Int64')
+        df_employee_records_api['contract_type'] = df_employee_records_api['contract_type'].apply(get_ID_from_url).astype('Int64')
+        
+        df_employee_records_api.rename(columns={'timespan.lower':'start', 'timespan.upper':'end'}, inplace=True)
+        df_employee_records_api.drop(columns=['api_url', 'created', 'modified'], inplace=True)
+        df_employee_records_api.sort_values(['employee', 'start'], inplace=True)
+
+        df_employee_records_api = df_employee_records_api.merge(df_contract_types_api, how='left', left_on='contract_type', right_on='id', suffixes=('', '_contract_type'))
+        df_employee_records_api = df_employee_records_api.merge(df_corporations_api, how='left', left_on='corporation', right_on='id', suffixes=('', '_corporation'))
+        df_employee_records_api = df_employee_records_api.merge(df_branch_corporations_api, how='left', left_on='branch_corporation', right_on='id', suffixes=('', '_branch_corporation'))
+        df_employee_records_api = df_employee_records_api.merge(df_employees_api, how='left', left_on='employee', right_on='id', suffixes=('', '_employee'))
+        df_employee_records_api['contract_type'] = df_employee_records_api['key']
+        df_employee_records_api['branch_corporation_code'] = df_employee_records_api['code_branch_corporation']
+        df_employee_records_api['corporation_code'] = df_employee_records_api['code']
+        
+    return df_employee_records_api
+
+def get_controle_areas_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das instâncias de área do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações das áreas do sistema Controle.
+    """
+    standard_columns = ['id', 'name', 'code']
+    drop_columns = ['api_url', 'created', 'modified', '_links.record_set', '_links.employee_history', '_links.parents']
+    df_area_instances_api = get_dataframe_from_api('controle', tenant, 'areas', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_area_instances_api.empty:
+        df_area_instances_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_area_instances_api.drop(columns=drop_columns, inplace=True)
+        df_area_instances_api['code'] = df_area_instances_api['code'].astype(str)
+    return df_area_instances_api
+
+def get_controle_area_records_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém registros de áreas do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com registros de áreas do sistema Controle, enriquecido com informações das áreas.
+    """
+    standard_columns = ['id','area','start','end','id_area','code','name','area_code']
+    df_controle_area_records_api = get_dataframe_from_api('controle', tenant, 'area_records', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_controle_area_records_api.empty:
+        df_controle_area_records_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_controle_area_records_api['start'] = df_controle_area_records_api['timespan.lower']
+        df_controle_area_records_api['end'] = df_controle_area_records_api['timespan.upper']
+        df_controle_area_records_api.drop(columns=['api_url', 'created', 'modified','timespan.upper','timespan.lower'], inplace=True)
+        df_controle_area_records_api['area'] = df_controle_area_records_api['area'].apply(get_ID_from_url)
+        df_controle_inst_area_api = get_controle_areas_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_controle_area_records_api = df_controle_area_records_api.merge(df_controle_inst_area_api, how='left', left_on='area', right_on='id', suffixes=('', '_area'))
+        df_controle_area_records_api['area_code'] = df_controle_area_records_api['code'].astype(str)
+    return df_controle_area_records_api
+
+def get_controle_parent_areas_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das hierarquias de área do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações das hierarquias de área do sistema Controle.
+    """
+    standard_columns = ['area_code', 'parent_code', 'start', 'end', 'id', 'uuid']
+    df_parent_areas_api = get_dataframe_from_api('controle', tenant, 'parent_areas', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_parent_areas_api.empty:
+        df_parent_areas_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_area_instances_api = get_controle_areas_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        dict_area_id_code = dict(zip(df_area_instances_api['id'], df_area_instances_api['code']))
+        df_parent_areas_api['id'] = df_parent_areas_api['api_url'].apply(get_ID_from_url)
+        df_parent_areas_api.rename(columns={'timespan.lower':'start', 'timespan.upper':'end'}, inplace=True)
+        df_parent_areas_api['area'] = df_parent_areas_api['area'].apply(get_ID_from_url)
+        df_parent_areas_api['area_code'] = df_parent_areas_api['area'].map(dict_area_id_code)
+        df_parent_areas_api['parent'] = df_parent_areas_api['parent'].apply(get_ID_from_url)
+        df_parent_areas_api['parent_code'] = df_parent_areas_api['parent'].map(dict_area_id_code)
+    return df_parent_areas_api
+
+def get_controle_employee_areas_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das áreas dos funcionários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações das áreas dos funcionários do sistema Controle.
+    """
+    standard_columns = ['employee_code', 'area_code', 'start', 'end', 'id', 'review_access', 'uuid']
+    df_employee_areas_api = get_dataframe_from_api('controle', tenant, 'employee_areas', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_employee_areas_api.empty:
+        df_employee_areas_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_area_instances_api = get_controle_areas_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_employees_api = get_controle_employees_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_employee_areas_api['employee_id'] = df_employee_areas_api['employee'].apply(get_ID_from_url)
+        df_employee_areas_api['area'] = df_employee_areas_api['area'].apply(get_ID_from_url)
+        df_employee_areas_api.rename(columns={'timespan.lower':'start', 'timespan.upper':'end'}, inplace=True)
+        df_employee_areas_api.drop(columns=['api_url', 'created', 'modified'], inplace=True)
+        df_employee_areas_api.sort_values(['employee_id', 'start'], inplace=True)
+        df_employee_areas_api = df_employee_areas_api.merge(df_area_instances_api, how='left', left_on='area', right_on='id', suffixes=('', '_area'))
+        df_employee_areas_api = df_employee_areas_api.merge(df_employees_api, how='left', left_on='employee_id', right_on='id', suffixes=('', '_employee'))
+        df_employee_areas_api = df_employee_areas_api.rename(columns={'code':'area_code'})   
+    return df_employee_areas_api
+
+def get_controle_employee_managers_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos gestores dos funcionários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos gestores dos funcionários do sistema Controle.
+    """
+    standard_columns = ['employee_code', 'manager_code', 'start', 'end', 'id', 'review_access', 'uuid']
+    drop_columns = ['api_url', 'created', 'modified']
+    df_employee_managers_api = get_dataframe_from_api('controle', tenant, 'employee_managers', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_employee_managers_api.empty:
+        df_employee_managers_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_employees_api = get_controle_employees_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_employee_managers_api['employee_id'] = df_employee_managers_api['employee'].apply(get_ID_from_url)
+        df_employee_managers_api['manager_id'] = df_employee_managers_api['manager'].apply(get_ID_from_url)
+        df_employee_managers_api.rename(columns={'timespan.lower':'start', 'timespan.upper':'end'}, inplace=True)
+        df_employee_managers_api.drop(columns=drop_columns, inplace=True)
+        df_employee_managers_api.sort_values(['employee_id', 'start'], inplace=True)
+
+        df_employee_managers_api = df_employee_managers_api.merge(df_employees_api, how='left', left_on='employee_id', right_on='id', suffixes=('', '_employee'))
+        df_employee_managers_api = df_employee_managers_api.merge(df_employees_api, how='left', left_on='manager_id', right_on='id', suffixes=('', '_manager'))
+        df_employee_managers_api.drop(columns=['review_access'], inplace=True)
+        df_employee_managers_api = df_employee_managers_api.loc[:,~df_employee_managers_api.columns.str.startswith('_links')]
+        df_employee_managers_api = df_employee_managers_api.loc[:,~df_employee_managers_api.columns.str.startswith('_actions')]
+        df_employee_managers_api = df_employee_managers_api.rename(columns={'employee_code_manager':'manager_code'})
+    return df_employee_managers_api
+
+def get_controle_seniority_levels_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos níveis de senioridade do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos níveis de senioridade do sistema Controle.
+    """
+    standard_columns = ['id', 'key', 'level']
+    df_seniority_levels_api = get_dataframe_from_api('controle', tenant, 'seniority_levels', token, page_size, max_workers, parallel=False, ignore_page_size_limits=ignore_page_size_limits)
+    if df_seniority_levels_api.empty:
+        df_seniority_levels_api = pd.DataFrame(columns=standard_columns)
+    return df_seniority_levels_api
+
+def get_controle_positions_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações das instâncias de cargo do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos cargos do sistema Controle.
+    """
+    standard_columns = ['id', 'name', 'code', 'seniority_level', 'description', 'category']
+    drop_columns = ['api_url', 'created', 'modified', '_links.record_set', '_links.employee_history']
+    df_positions_api = get_dataframe_from_api('controle', tenant, 'positions', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_positions_api.empty:
+        df_positions_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_positions_api['code'] = df_positions_api['code'].astype(str)
+        df_positions_api.drop(columns=drop_columns, inplace=True)
+    return df_positions_api
+
+def get_controle_position_records_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém registros de cargo do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com registros de cargos do sistema Controle, enriquecido com informações dos cargos.
+    """
+    standard_columns = ['id','position','start','end','id_position','code','name','position_code']
+    df_controle_position_records_api = get_dataframe_from_api('controle', tenant, 'position_records', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_controle_position_records_api.empty:
+        df_controle_position_records_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_controle_position_records_api['start'] = df_controle_position_records_api['timespan.lower']
+        df_controle_position_records_api['end'] = df_controle_position_records_api['timespan.upper']
+        df_controle_position_records_api.drop(columns=['api_url', 'created', 'modified','timespan.upper','timespan.lower'], inplace=True)
+        df_controle_position_records_api['position'] = df_controle_position_records_api['position'].apply(get_ID_from_url)
+        df_controle_inst_position_api = get_controle_positions_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_controle_position_records_api = df_controle_position_records_api.merge(df_controle_inst_position_api, how='left', left_on='position', right_on='id', suffixes=('', '_position'))
+        df_controle_position_records_api['position_code'] = df_controle_position_records_api['code'].astype(str)
+    return df_controle_position_records_api
+
+def get_controle_employee_positions_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos cargos dos funcionários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos cargos dos funcionários do sistema Controle.
+    """
+    standard_columns = ['employee_code', 'position_code', 'start', 'end', 'id', 'review_access', 'uuid']
+    drop_columns = ['api_url', 'created', 'modified']
+    df_employee_positions_api = get_dataframe_from_api('controle', tenant, 'employee_positions', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_employee_positions_api.empty:
+        df_employee_positions_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_positions_api = get_controle_positions_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_employees_api = get_controle_employees_api(tenant, token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+        df_employee_positions_api['employee_id'] = df_employee_positions_api['employee'].apply(get_ID_from_url)
+        df_employee_positions_api['position'] = df_employee_positions_api['position'].apply(get_ID_from_url)
+        df_employee_positions_api.rename(columns={'timespan.lower':'start', 'timespan.upper':'end'}, inplace=True)
+        df_employee_positions_api.drop(columns=drop_columns, inplace=True)
+        df_employee_positions_api.sort_values(['employee', 'start'], inplace=True)
+        df_employee_positions_api = df_employee_positions_api.merge(df_positions_api, how='left', left_on='position', right_on='id', suffixes=('', '_position'))
+        df_employee_positions_api = df_employee_positions_api.merge(df_employees_api, how='left', left_on='employee_id', right_on='id', suffixes=('', '_employee'))
+        df_employee_positions_api = df_employee_positions_api.rename(columns={'code':'position_code'})
+    return df_employee_positions_api
+
+def get_controle_raise_types_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos tipos de promoção do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos tipos de promoção do sistema Controle.
+    """
+    standard_columns = ['id', 'key', 'description', 'raise_type']
+    df_raise_types_api = get_dataframe_from_api('controle', tenant, 'raise_types', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_raise_types_api.empty:
+        df_raise_types_api = pd.DataFrame(columns=standard_columns)
+    return df_raise_types_api
+
+def get_controle_salaries_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos salários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos salários do sistema Controle.
+    """
+    standard_columns = ['id', 'employee_code', 'employee', 'date', 'salary_currency', 'salary', 'raise_type']
+    df_salaries_api = get_dataframe_from_api('controle', tenant, 'salaries', token, page_size, max_workers, parallel, ignore_page_size_limits=ignore_page_size_limits)
+    if df_salaries_api.empty:
+        df_salaries_api = pd.DataFrame(columns=standard_columns)
+    else:
+        df_salaries_api['employee_code'] = df_salaries_api['employee']
+    return df_salaries_api
+
+
+def get_controle_template_tasks_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos salários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos salários do sistema Controle.
+    """
+    standard_columns = ['id', 'key', 'name', 'description', 'tags']
+    df_template_tasks_api = get_dataframe_from_api('controle', tenant, 'employee_tasks/template-tasks/', token, parallel=False)
+    if df_template_tasks_api.empty:
+        df_template_tasks_api = pd.DataFrame(columns=standard_columns)
+    return df_template_tasks_api
+
+def get_controle_tasks_evaluation_options_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos salários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos salários do sistema Controle.
+    """
+    standard_columns = ['id', 'key', 'name', 'description', 'color_tag', 'color_text']
+    df_tasks_evaluation_options_api = get_dataframe_from_api('controle', tenant, 'employee_tasks/evaluation-options/', token, parallel=False)
+    if df_tasks_evaluation_options_api.empty:
+        df_tasks_evaluation_options_api = pd.DataFrame(columns=standard_columns)
+    return df_tasks_evaluation_options_api
+
+def get_controle_employee_tasks_api(
+    tenant: str,
+    token: str,
+    page_size: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    parallel: bool = True,
+    ignore_page_size_limits: bool = False
+) -> pd.DataFrame:
+    """
+    Obtém informações dos salários do sistema Controle via API.
+
+    Parâmetros:
+    -----------
+    tenant : str
+        Nome do tenant.
+    token : str
+        Token de autenticação.
+    page_size : int, opcional
+        Tamanho da página (padrão: None).
+    max_workers : int, opcional
+        Número máximo de threads paralelas.
+    parallel : bool, opcional
+        Se True, faz requisições em paralelo.
+    ignore_page_size_limits : bool, opcional
+        Se True, ignora limites de tamanho de página.
+
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com informações dos salários do sistema Controle.
+    """
+    standard_columns = [
+        'id', 'template_task', 'template_task.id', 'template_task.key', 'template_task.name', 'template_task.description', 'template_task.tags',
+        'priority','priority_display','source_type','source_object_type','source_object_id','ignored_at','ignored_by','created','modified'
+    ]
+    df_employee_tasks_api = get_dataframe_from_api('controle', tenant, 'employee_tasks/tasks/', token, parallel=False)
+    if df_employee_tasks_api.empty:
+        df_employee_tasks_api = pd.DataFrame(columns=standard_columns)
+    return df_employee_tasks_api
+
+
