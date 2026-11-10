@@ -5,27 +5,26 @@ import base64
 import subprocess
 import sys
 
-
-# 1. Configuração da página (DEVE ser a primeira linha)
-st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
-
 # 1. Configuração da página
 st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
 
 # =============================================================================
-# INSTALADOR DINÂMICO DO PACOTE PRIVADO
+# INSTALADOR DINÂMICO DO PACOTE PRIVADO (Modo User)
 # =============================================================================
 try:
     import mindsight_api_requests
 except ImportError:
-    with st.spinner("Instalando dependências privadas..."):
+    with st.spinner("Instalando dependências privadas (Modo User)..."):
         # Puxa o token em segurança diretamente do painel Secrets
         token = st.secrets["GITHUB_TOKEN"]
         # Monta a URL de instalação com o token real
         repo_url = f"git+https://{token}@github.com/Data-Ops-Mindsight/mindsight-api-requests.git"
-        # Executa a instalação via pip no servidor
-        subprocess.check_call([sys.executable, "-m", "pip", "install", repo_url])
-        st.rerun() # Reinicia a página após instalar
+        
+        # Executa a instalação forçando o diretório do usuário para evitar "Permission denied"
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", repo_url])
+        
+        # O Streamlit precisa ser avisado de que os pacotes locais mudaram
+        st.rerun()
 
 # 2. Importações Locais (Devem ficar ABAIXO do instalador dinâmico)
 from style import apply_style
