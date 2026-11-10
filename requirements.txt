@@ -5,4 +5,4 @@ requests
 beautifulsoup4
 selenium
 openpyxl
-git+https://x-access-token:{GITHUB_TOKEN}@github.com/Data-Ops-Mindsight/mindsight-api-requests.git
+git+https://${GITHUB_TOKEN}@[github.com/Data-Ops-Mindsight/mindsight-api-requests.git](https://github.com/Data-Ops-Mindsight/mindsight-api-requests.git)
