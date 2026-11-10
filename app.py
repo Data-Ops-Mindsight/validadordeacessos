@@ -2,9 +2,37 @@ import streamlit as st
 import pandas as pd
 import os
 import base64
+import subprocess
+import sys
+
 
 # 1. Configuração da página (DEVE ser a primeira linha)
 st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
+
+# 1. Configuração da página
+st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
+
+# =============================================================================
+# INSTALADOR DINÂMICO DO PACOTE PRIVADO
+# =============================================================================
+try:
+    import mindsight_api_requests
+except ImportError:
+    with st.spinner("Instalando dependências privadas..."):
+        # Puxa o token em segurança diretamente do painel Secrets
+        token = st.secrets["GITHUB_TOKEN"]
+        # Monta a URL de instalação com o token real
+        repo_url = f"git+https://{token}@github.com/Data-Ops-Mindsight/mindsight-api-requests.git"
+        # Executa a instalação via pip no servidor
+        subprocess.check_call([sys.executable, "-m", "pip", "install", repo_url])
+        st.rerun() # Reinicia a página após instalar
+
+# 2. Importações Locais (Devem ficar ABAIXO do instalador dinâmico)
+from style import apply_style
+from abas.aba1_validacao import render_aba1
+
+# Aplica o estilo Mindsight
+apply_style()
 
 # 2. Importações Locais
 from style import apply_style
