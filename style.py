@@ -1,6 +1,9 @@
+"""Estilo visual (CSS) aplicado a todas as páginas do app."""
+
 import streamlit as st
 
 def apply_style():
+    """Injeta o CSS com a identidade visual da Mindsight (fundo branco, roxo #8c00ff, abas e botões)."""
     st.markdown("""
         <style>
         /* Fundo branco e texto escuro global */
