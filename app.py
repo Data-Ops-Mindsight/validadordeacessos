@@ -2,45 +2,41 @@ import streamlit as st
 import pandas as pd
 import os
 import base64
-import subprocess
 import sys
+import subprocess
 
-# 1. Configuração da página
+# Configuração da página (DEVE ser a primeira linha)
 st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
 
 # =============================================================================
-# INSTALADOR DINÂMICO DO PACOTE PRIVADO (Modo User)
+# INJEÇÃO SEGURA DO PACOTE PRIVADO (Sem expor no GitHub e sem usar pip)
 # =============================================================================
-try:
-    import mindsight_api_requests
-except ImportError:
-    with st.spinner("Instalando dependências privadas (Modo User)..."):
-        # Puxa o token em segurança diretamente do painel Secrets
+PASTA_TMP = "/tmp/mindsight_api"
+
+# Se o pacote ainda não estiver na memória temporária do servidor, faz o download
+if not os.path.exists(PASTA_TMP):
+    with st.spinner("Autenticando ambiente seguro..."):
+        # Puxa o token do painel Secrets do Streamlit Cloud
         token = st.secrets["GITHUB_TOKEN"]
-        # Monta a URL de instalação com o token real
-        repo_url = f"git+https://{token}@github.com/Data-Ops-Mindsight/mindsight-api-requests.git"
+        repo_url = f"https://{token}@github.com/Data-Ops-Mindsight/mindsight-api-requests.git"
         
-        # Executa a instalação forçando o diretório do usuário para evitar "Permission denied"
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", repo_url])
-        
-        # O Streamlit precisa ser avisado de que os pacotes locais mudaram
-        st.rerun()
+        # Clona o repositório silenciosamente para a pasta temporária do Linux
+        subprocess.run(["git", "clone", "--quiet", repo_url, PASTA_TMP], check=True)
 
-# 2. Importações Locais (Devem ficar ABAIXO do instalador dinâmico)
+# Ensina o Python a procurar bibliotecas dentro desta pasta temporária
+if PASTA_TMP not in sys.path:
+    sys.path.insert(0, PASTA_TMP)
+
+# =============================================================================
+# IMPORTAÇÕES DO PROJETO (Devem ficar abaixo da injeção)
+# =============================================================================
 from style import apply_style
 from abas.aba1_validacao import render_aba1
 
 # Aplica o estilo Mindsight
 apply_style()
 
-# 2. Importações Locais
-from style import apply_style
-from abas.aba1_validacao import render_aba1
-
-# Aplica o estilo Mindsight
-apply_style()
-
-# 3. Inicialização da Memória (Session State global)
+# Inicialização da Memória (Session State global)
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': ""
 }
@@ -100,7 +96,3 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # Renderização do conteúdo de cada aba de forma modular
 with tab1:
     render_aba1()
-
-# Quando as próximas abas forem criadas, basta adicionar:
-# with tab2:
-#     render_aba2()
