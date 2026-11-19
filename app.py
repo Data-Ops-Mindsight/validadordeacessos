@@ -1,3 +1,16 @@
+"""
+Canivete Suíço de Acessos (Mindsight) - ponto de entrada do app Streamlit.
+
+Responsabilidades deste arquivo:
+  - configurar a página;
+  - baixar o pacote privado 'mindsight-api-requests' (usado pelas funções de API);
+  - inicializar a memória da sessão (session_state);
+  - montar a barra lateral com a logo e as abas da ferramenta.
+
+Para rodar localmente: streamlit run app.py
+(é necessário ter GITHUB_TOKEN em .streamlit/secrets.toml)
+"""
+
 import streamlit as st
 import pandas as pd
 import os
@@ -37,6 +50,11 @@ from abas.aba1_validacao import render_aba1
 apply_style()
 
 # Inicialização da Memória (Session State global)
+# Guarda os resultados da Aba 1 entre as interações (cada clique reexecuta o script inteiro).
+#   t1_processed: se já houve um processamento bem-sucedido
+#   t1_df1 / t1_df2: usuários do Passo 1 e do Passo 2
+#   t1_len: total de funcionários ativos encontrados no Controle
+#   t1_tenant: tenant usado no processamento (vai no nome dos arquivos)
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': ""
 }
@@ -48,6 +66,7 @@ for chave, valor in chaves_memoria.items():
 # =============================================================================
 # BARRA LATERAL COM A LOGO 
 # =============================================================================
+# Tenta usar a logo em SVG; se não existir, usa o PNG; se nada existir, mostra o nome em texto.
 logo_svg = "mindsight_logo.svg"
 logo_png = "mindsight_logo.png"
 
@@ -84,6 +103,7 @@ st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
 st.title("Canivete Suíço de Acessos")
 
 # Criação das abas visuais
+# Observação: por enquanto apenas a Aba 1 está implementada; as demais ainda estão vazias.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
