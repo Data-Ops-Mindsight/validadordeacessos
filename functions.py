@@ -207,6 +207,17 @@ def ler_usuarios_full(cliente, token_full):
     return func_api_get_base_parallel('full', cliente, token_full, 'users')
 
 
+def ler_usuarios_performance(cliente, token_performance, rodada):
+    """Lista os participantes de uma rodada (evaluation round) do Performance."""
+    return func_api_get_base_parallel('performance', cliente, token_performance, 'participants',
+                                      extra_param=f'&evaluation_rounds={rodada}')
+
+
+def ler_perfomance_evaluation_rounds(cliente, token_performance):
+    """Lista as rodadas de avaliação do Performance (usado para mostrar o nome da rodada)."""
+    return func_api_get_base_parallel('performance', cliente, token_performance, 'evaluation_rounds')
+
+
 # =============================================================================
 # REGRA DE ACESSOS (COM CHECK DE REMOÇÃO)
 # =============================================================================
@@ -338,6 +349,44 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
     teve_mudanca_csv2 = str_csv1 != str_csv2
 
     return pd.Series([str_csv1, str_csv2, teve_mudanca_csv1, teve_mudanca_csv2, motivo_final])
+
+
+def formatar_acesso_performance(row):
+    """
+    Regra da Aba 3 (participantes da rodada): todo participante precisa estar
+    ativo no Auth e ter o módulo 'performance'.
+
+    Retorna 3 valores: acessos novos, se precisa de ajuste e o motivo.
+    Participantes que não existem na base do Auth ('_merge' == 'left_only')
+    não entram no arquivo de correção; vão para a lista de "não encontrados".
+    """
+    if row['_merge'] == 'left_only':
+        return pd.Series(['', False, 'Usuário não encontrado na base do Auth enviada'])
+
+    motivos = []
+    is_active = row['is_active']
+    access = row['access_to_systems']
+
+    # 1. Usuário inativo no Auth precisa ser reativado
+    precisa_ativar = is_active not in [1, '1', True, 'True', 1.0]
+    if precisa_ativar:
+        motivos.append('ativar usuário inativo')
+
+    # Converte o texto atual de acessos em lista limpa e minúscula
+    if pd.isna(access) or str(access).strip() == '':
+        lista_atual = []
+    else:
+        limpo = str(access).replace("'", "").replace('"', "").replace(" ", "").lower()
+        lista_atual = [s.strip() for s in limpo.split(',') if s.strip()]
+
+    # 2. Garante o módulo performance (mantém os demais acessos como estão)
+    lista_nova = lista_atual.copy()
+    if 'performance' not in lista_nova:
+        lista_nova.append('performance')
+        motivos.append('faltava performance')
+
+    precisa_ajuste = precisa_ativar or ('faltava performance' in motivos)
+    return pd.Series([",".join(lista_nova), precisa_ajuste, "; ".join(motivos)])
 
 
 def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False):

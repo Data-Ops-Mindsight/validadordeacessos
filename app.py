@@ -46,6 +46,7 @@ if PASTA_TMP not in sys.path:
 from style import apply_style
 from abas.aba1_validacao import render_aba1
 from abas.aba2_inativacao import render_aba2
+from abas.aba3_participantes import render_aba3
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -59,9 +60,14 @@ apply_style()
 # E os resultados da Aba 2:
 #   t2_processed / t2_df / t2_tenant: processamento, base de inativação e tenant
 #   t2_msg / t2_empty: mensagem de resultado e se não havia ninguém para inativar
+# E os resultados da Aba 3:
+#   t3_df_fix / t3_df_not_found / t3_df_desligados: correção do Auth, não encontrados e desligados
+#   t3_len_total / t3_qtd_mindsight / t3_tenant / t3_nome_rodada: totais e dados da rodada
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "",
-    't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False
+    't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
+    't3_processed': False, 't3_df_fix': pd.DataFrame(), 't3_df_not_found': pd.DataFrame(),
+    't3_df_desligados': pd.DataFrame(), 't3_len_total': 0, 't3_qtd_mindsight': 0, 't3_tenant': "", 't3_nome_rodada': ""
 }
 
 for chave, valor in chaves_memoria.items():
@@ -102,6 +108,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("Módulos Disponíveis")
 st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
 st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
+st.sidebar.markdown("🎯 Participantes da Rodada")
 
 # =============================================================================
 # CORPO PRINCIPAL
@@ -109,7 +116,7 @@ st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
 st.title("Canivete Suíço de Acessos")
 
 # Criação das abas visuais
-# Observação: por enquanto apenas as Abas 1 e 2 estão implementadas; as demais ainda estão vazias.
+# Observação: por enquanto apenas as Abas 1, 2 e 3 estão implementadas; as demais ainda estão vazias.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
@@ -125,3 +132,6 @@ with tab1:
 
 with tab2:
     render_aba2()
+
+with tab3:
+    render_aba3()
