@@ -26,6 +26,19 @@ VALORES_ATIVO = [1, True, '1', 'True', 1.0]
 def render_aba2():
     st.header("Inativar Acessos - Colaboradores Desligados")
 
+    # Explicação da regra e do que o arquivo gerado faz
+    st.info(
+        "💡 **Quem é considerado desligado?** O colaborador que **não possui nenhum registro de "
+        "funcionário aberto** no Controle, ou seja, **todos os seus registros têm a data de demissão "
+        "preenchida**. Funcionários cadastrados sem nenhum registro também entram como desligados.\n\n"
+        "🚫 **Funcionários da Mindsight são desconsiderados** nesta validação (por padrão eles não "
+        "possuem nenhum registro cadastrado), então nunca são inativados por esta aba.\n\n"
+        "📄 **O que o arquivo gerado faz?** Para cada usuário de colaborador desligado que ainda está "
+        "ativo no Auth, o arquivo:\n"
+        "- **remove os acessos aos módulos**, deixando vazia a coluna `access_to_systems`;\n"
+        "- **inativa o usuário no Auth**, colocando `0` na coluna `is_active`."
+    )
+
     # -------------------------------------------------------------------------
     # SEÇÃO 1: CREDENCIAIS
     # -------------------------------------------------------------------------
