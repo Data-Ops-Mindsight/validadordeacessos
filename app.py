@@ -45,6 +45,7 @@ if PASTA_TMP not in sys.path:
 # =============================================================================
 from style import apply_style
 from abas.aba1_validacao import render_aba1
+from abas.aba2_inativacao import render_aba2
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -55,8 +56,12 @@ apply_style()
 #   t1_df1 / t1_df2: usuários do Passo 1 e do Passo 2
 #   t1_len: total de funcionários ativos encontrados no Controle
 #   t1_tenant: tenant usado no processamento (vai no nome dos arquivos)
+# E os resultados da Aba 2:
+#   t2_processed / t2_df / t2_tenant: processamento, base de inativação e tenant
+#   t2_msg / t2_empty: mensagem de resultado e se não havia ninguém para inativar
 chaves_memoria = {
-    't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': ""
+    't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "",
+    't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False
 }
 
 for chave, valor in chaves_memoria.items():
@@ -94,8 +99,9 @@ else:
     st.sidebar.markdown("### **mindsight**")
 
 st.sidebar.markdown("---")
-st.sidebar.header("Módulo Atual")
+st.sidebar.header("Módulos Disponíveis")
 st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
+st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
 
 # =============================================================================
 # CORPO PRINCIPAL
@@ -103,7 +109,7 @@ st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
 st.title("Canivete Suíço de Acessos")
 
 # Criação das abas visuais
-# Observação: por enquanto apenas a Aba 1 está implementada; as demais ainda estão vazias.
+# Observação: por enquanto apenas as Abas 1 e 2 estão implementadas; as demais ainda estão vazias.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
@@ -116,3 +122,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # Renderização do conteúdo de cada aba de forma modular
 with tab1:
     render_aba1()
+
+with tab2:
+    render_aba2()
