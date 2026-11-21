@@ -45,6 +45,29 @@ def gerar_downloads(df_final, tenant, sufixo, sufixo_parte, rotulo_csv, chave, c
 def render_aba1():
     st.header("Validação de Acessos - Colaboradores Ativos")
 
+    # Explicação da regra e do que os arquivos gerados fazem
+    st.info(
+        "💡 **Quem é considerado ativo?** O colaborador cujo **registro de funcionário mais recente "
+        "no Controle está aberto** (sem data de demissão). Só entram na validação os usuários do Auth "
+        "que pertencem a esses colaboradores ativos; os demais não são alterados (os desligados são "
+        "tratados na aba **Inativar (Desligados)**).\n\n"
+        "🚫 **Funcionários da Mindsight são desconsiderados** nesta validação.\n\n"
+        "✅ **O que é validado em cada usuário:**\n"
+        "- **Ativação:** se o usuário estiver inativo no Auth, ele é reativado;\n"
+        "- **Metas e Performance:** adiciona os módulos conforme a opção de *Módulos de Desempenho*;\n"
+        "- **Organograma (Controle):** adiciona para quem está na lista restrita do Controle;\n"
+        "- **ATS:** adiciona para os gestores ou para os usuários específicos, conforme a opção escolhida;\n"
+        "- **People Hub (Full):** só é avaliado se o token do Full for informado; adiciona para todos, "
+        "para os gestores e/ou para a lista restrita, conforme as opções.\n\n"
+        "Nos módulos com a opção **'Remover o acesso de quem NÃO está autorizado'** marcada, o acesso "
+        "também é retirado de quem não se encaixa na regra.\n\n"
+        "📄 **O que os arquivos gerados fazem?** Trazem apenas os usuários que precisam de algum ajuste:\n"
+        "- **Passo 1:** atualiza a coluna `access_to_systems` com os módulos corretos e deixa o usuário "
+        "ativo no Auth (`1` na coluna `is_active`). A coluna `motivo_ajuste` mostra o que mudou;\n"
+        "- **Passo 2:** só aparece para quem deve ter o People Hub mas está inativo nele. Devolve o "
+        "módulo `full`, que foi retirado no Passo 1, para forçar a reativação no Hub. Suba-o **depois** do Passo 1."
+    )
+
     # -------------------------------------------------------------------------
     # SEÇÃO 1: CREDENCIAIS
     # -------------------------------------------------------------------------
