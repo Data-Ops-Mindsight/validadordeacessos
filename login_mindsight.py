@@ -110,6 +110,32 @@ def _mensagem_de_erro(html):
     return ""
 
 
+def _resumo_pagina(sessao, resposta):
+    """
+    Resumo técnico de uma página (sem valores de campos nem de cookies), usado
+    quando o login não segue o caminho esperado: URL, redirecionamentos,
+    formulários e seus campos, campos fora de formulário e nomes dos cookies.
+    """
+    soup = BeautifulSoup(resposta.text, 'html.parser')
+    caminho = " → ".join([r.url.split('?')[0] for r in resposta.history] + [resposta.url.split('?')[0]])
+    forms = []
+    for f in soup.find_all('form'):
+        campos = [f"{i.get('name') or i.get('id') or '?'}:{(i.get('type') or 'text').lower()}"
+                  for i in f.find_all(['input', 'select', 'textarea'])]
+        forms.append(f"[action={f.get('action') or '(mesma página)'} method={f.get('method') or 'get'} campos={', '.join(campos)}]")
+    soltos = [f"{i.get('name') or i.get('id') or '?'}:{(i.get('type') or 'text').lower()}"
+              for i in soup.find_all('input') if i.find_parent('form') is None]
+    cookies = sorted({f"{c.name} ({c.domain})" for c in sessao.cookies})
+    titulo = soup.title.get_text(strip=True) if soup.title else ''
+    return ("Detalhes técnicos: status = " + str(resposta.status_code)
+            + " | caminho = " + caminho
+            + " | título = " + titulo
+            + " | formulários = " + (" ".join(forms) or "nenhum")
+            + " | campos fora de formulário = " + (", ".join(soltos) or "nenhum")
+            + " | scripts = " + str(len(soup.find_all('script')))
+            + " | cookies = " + (", ".join(cookies) or "nenhum"))
+
+
 def _enviar_form(sessao, form, dados, url_pagina):
     """Envia o formulário para o 'action' dele (ou para a própria página)."""
     destino = urljoin(url_pagina, form.get('action') or url_pagina)
@@ -131,8 +157,8 @@ def _login_concluido(resposta):
 def iniciar_login(tenant, email, senha):
     """
     Etapa 1: envia email e senha.
-    Retorna (sessao, contexto_token). Se contexto_token for None, o login já foi
-    concluído (sem token); caso contrário, é preciso chamar confirmar_token().
+    Retorna (sessao, contexto_token). Em seguida é preciso chamar
+    confirmar_token() com o token que a Mindsight envia por email.
     """
     sessao = requests.Session()
     sessao.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
@@ -166,9 +192,16 @@ def iniciar_login(tenant, email, senha):
 
     form_token, campo_token = _form_de_token(r2.text, r2.url)
     if form_token is None:
-        return sessao, None  # login concluído sem token
+        # O login da Mindsight SEMPRE pede o token enviado por email. Se a tela do
+        # token não foi reconhecida, não dá o login como feito: mostra um resumo
+        # técnico da página para ajustar a leitura.
+        raise ErroLogin("Email e senha aceitos, mas não reconheci a tela do token enviado por email. "
+                        "Envie os detalhes técnicos abaixo para ajuste.\n\n" + _resumo_pagina(sessao, r2))
 
+    # Campos de token "um dígito por caixa" (vários inputs com maxlength=1)
+    caixas = [i.get('name') for i in _inputs_visiveis(form_token) if i.get('maxlength') == '1']
     contexto = {'dados': _dados_do_form(form_token), 'campo': campo_token,
+                'caixas': caixas if len(caixas) > 1 else [],
                 'url': r2.url, 'form_html': str(form_token)}
     return sessao, contexto
 
@@ -177,11 +210,18 @@ def confirmar_token(sessao, contexto, token):
     """Etapa 2: envia o token recebido por email e conclui o login."""
     form = BeautifulSoup(contexto['form_html'], 'html.parser').find('form')
     dados = dict(contexto['dados'])
-    dados[contexto['campo']] = token.strip()
+    token = token.strip()
+    if contexto.get('caixas'):
+        # Um caractere do token em cada caixa
+        for nome, caractere in zip(contexto['caixas'], token):
+            dados[nome] = caractere
+    else:
+        dados[contexto['campo']] = token
     r = _enviar_form(sessao, form, dados, contexto['url'])
     if not _login_concluido(r):
         detalhe = _mensagem_de_erro(r.text)
-        raise ErroLogin("Token inválido ou expirado. Solicite um novo login." + (f" ({detalhe})" if detalhe else ""))
+        raise ErroLogin("Token inválido ou expirado. Solicite um novo login." + (f" ({detalhe})" if detalhe else "")
+                        + "\n\n" + _resumo_pagina(sessao, r))
     return sessao
 
 
@@ -259,12 +299,10 @@ def render_login(prefixo="login"):
         try:
             with st.spinner("Entrando..."):
                 sessao, contexto = iniciar_login(tenant, email, senha)
+            # Email e senha aceitos: guarda a sessão e passa para a etapa do token
             st.session_state['login_tenant'] = tenant.strip()
-            if contexto is None:
-                st.session_state['cookies_sessao'] = sessao
-            else:
-                st.session_state['login_sessao'] = sessao
-                st.session_state['login_contexto'] = contexto
+            st.session_state['login_sessao'] = sessao
+            st.session_state['login_contexto'] = contexto
             st.rerun()
         except ErroLogin as e:
             st.error(str(e))
