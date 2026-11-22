@@ -137,8 +137,12 @@
   const extrairLink = (linha) => {
     const a = linha.querySelector('th a') || linha.querySelector('td a');
     if (!a) return null;
-    const href = new URL(a.getAttribute('href'), location.href).href;
-    return { chave: href };
+    // O admin acrescenta ao link a página de origem (?_changelist_filters=p%3D2).
+    // Sem limpar isso, o mesmo registro parece "novo" em cada página e a leitura nunca termina.
+    const url = new URL(a.getAttribute('href'), location.href);
+    url.search = '';
+    url.hash = '';
+    return { chave: url.href };
   };
   const idDoLink = (link) => { const m = link.match(/\/(\d+)\/change\/?/); return m ? m[1] : ''; };
 
