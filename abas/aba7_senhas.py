@@ -94,9 +94,9 @@ def render_aba7():
                 df['username'] = df['username'].astype(str).str.strip()
                 total = len(df)
 
-                # Remove usuários da Mindsight
-                eh_mindsight = df['username'].str.contains('mindsight', case=False, na=False) \
-                    | df['email'].astype(str).str.contains('@mindsight', case=False, na=False)
+                # Remove usuários da Mindsight (pelo username, como nas abas 1 e 2; o email não é usado
+                # porque usuários de teste do cliente podem ter email @mindsight)
+                eh_mindsight = df['username'].str.contains('mindsight', case=False, na=False)
                 qtd_mindsight = int(eh_mindsight.sum())
                 df = df.loc[~eh_mindsight]
 
