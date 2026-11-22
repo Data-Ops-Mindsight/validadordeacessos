@@ -133,18 +133,22 @@ def gerar_excel_multi_abas(dict_dfs):
     return output.getvalue()
 
 
-def ler_csv_seguro(uploaded_file):
+def ler_csv_seguro(uploaded_file, como_texto=False):
     """
     Lê o CSV enviado pelo usuário tentando primeiro detectar o separador
     automaticamente (UTF-8). Se falhar, tenta o padrão Excel brasileiro
     (separador ';' e codificação latin1). Também remove espaços dos nomes das colunas.
+
+    como_texto: lê todas as colunas como texto (evita que códigos como
+    '76706119288' virem número e percam zeros ou casas).
     """
+    opcoes = {'dtype': str, 'keep_default_na': False} if como_texto else {}
     uploaded_file.seek(0)
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig')
+        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8-sig', **opcoes)
     except Exception:
         uploaded_file.seek(0)
-        df = pd.read_csv(uploaded_file, sep=';', encoding='latin1')
+        df = pd.read_csv(uploaded_file, sep=';', encoding='latin1', **opcoes)
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
@@ -214,6 +218,11 @@ def func_api_get_base_parallel(sistema, client, token, endpoint, ids=None, group
 def ler_usuarios_full(cliente, token_full):
     """Lista todos os usuários do People Hub (Full) do cliente."""
     return func_api_get_base_parallel('full', cliente, token_full, 'users')
+
+
+def ler_funcionarios_hub(cliente, token_full):
+    """Lista todos os funcionários (people) do People Hub, com cargo, área e gestor."""
+    return func_api_get_base_parallel('full', cliente, token_full, 'people')
 
 
 def ler_usuarios_controle(cliente, token_controle):

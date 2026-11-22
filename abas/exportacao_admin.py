@@ -1,10 +1,11 @@
 """
 Exportação dos usuários do Performance e do Metas pelo favorito do navegador.
 
-Compartilhado pelas abas que precisam desses usuários (Aba 1 e Aba 4):
+Compartilhado pelas abas que usam o favorito (Abas 1, 4 e 5):
   - codigo_favorito(): código do favorito "Exportar usuários" (bookmarklet);
   - ler_csv_modulo(): lê e confere o CSV gerado pelo favorito;
-  - render_instrucoes_exportacao(): passo a passo exibido na tela.
+  - render_criar_favorito(): código do favorito e como criá-lo em cada navegador;
+  - render_instrucoes_exportacao(): passo a passo exibido na tela (usuários).
 
 Por que assim: no Performance o admin do Django não permite exportar os
 usuários, no Metas a exportação não traz o UUID e a API também não traz essas
@@ -41,6 +42,9 @@ def ler_csv_modulo(arquivo, nome_modulo, prefixo_esperado, exigir_ativo=False):
     outros = {'performance_', 'metas_'} - {prefixo_esperado}
     if any(nome_arquivo.startswith(o) for o in outros):
         raise ValueError(f"o arquivo enviado em '{nome_modulo}' parece ser de outro módulo ({arquivo.name}).")
+    if '_participantes' in nome_arquivo or '_persons' in nome_arquivo:
+        raise ValueError(f"o arquivo enviado em '{nome_modulo}' é de participants/persons ({arquivo.name}). "
+                         "Aqui vai o CSV gerado na tela de usuários (accounts/user/).")
     df = ler_csv_seguro(arquivo)
     if 'username' not in df.columns:
         raise ValueError(f"o CSV do {nome_modulo} não possui a coluna 'username'. "
@@ -50,6 +54,52 @@ def ler_csv_modulo(arquivo, nome_modulo, prefixo_esperado, exigir_ativo=False):
         raise ValueError(f"o CSV do {nome_modulo} não informa se os usuários estão ativos (coluna 'is_active'). "
                          "Gere o arquivo novamente com a versão atual do favorito 'Exportar usuários'.")
     return df
+
+
+def render_criar_favorito(titulo="#### Passo 1 - Criar o favorito (só na primeira vez)"):
+    """Mostra o código do favorito e como criá-lo em cada navegador (usado nas Abas 1, 4 e 5)."""
+    # --- Passo 1: criar o favorito ---
+    st.markdown(
+        titulo + "\n"
+        "Copie o código abaixo (ícone de copiar no canto direito da caixa). Ele começa com `javascript:` "
+        "e é ele que vai no lugar do endereço do favorito."
+    )
+    codigo = codigo_favorito()
+    if codigo:
+        st.code(codigo, language=None)
+    else:
+        st.warning("Arquivo do favorito não encontrado (ferramentas/bookmarklet_exportar_usuarios.txt).")
+
+    st.markdown("Depois siga os passos do seu navegador:")
+    aba_edge, aba_chrome, aba_firefox = st.tabs(["Microsoft Edge", "Google Chrome", "Mozilla Firefox"])
+    with aba_edge:
+        st.markdown(
+            "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+            "2. Em qualquer página aberta, clique com o botão direito na barra de favoritos e escolha "
+            "**Adicionar esta página aos favoritos**. Clique em **Concluído**;\n"
+            "3. Clique com o botão direito no favorito que acabou de aparecer na barra e escolha **Editar**;\n"
+            "4. Em **Nome**, escreva `Exportar usuários`;\n"
+            "5. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
+            "6. Clique em **Salvar**."
+        )
+    with aba_chrome:
+        st.markdown(
+            "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+            "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar página...**;\n"
+            "3. Em **Nome**, escreva `Exportar usuários`;\n"
+            "4. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
+            "5. Clique em **Salvar**."
+        )
+    with aba_firefox:
+        st.markdown(
+            "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+            "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar favorito...**;\n"
+            "3. Em **Nome**, escreva `Exportar usuários`;\n"
+            "4. Em **URL**, cole o código copiado;\n"
+            "5. Clique em **Salvar**."
+        )
+    st.caption("Ao final, o favorito **Exportar usuários** aparece na barra de favoritos. Não é preciso criar de novo "
+               "nas próximas vezes. Se o código do favorito mudar, edite o favorito e cole o código novo no campo **URL**.")
 
 
 def render_instrucoes_exportacao(texto_envio):
@@ -70,47 +120,7 @@ def render_instrucoes_exportacao(texto_envio):
             "**apenas lê** a tabela: nada é alterado no sistema."
         )
 
-        # --- Passo 1: criar o favorito ---
-        st.markdown(
-            "#### Passo 1 - Criar o favorito (só na primeira vez)\n"
-            "Copie o código abaixo (ícone de copiar no canto direito da caixa). Ele começa com `javascript:` "
-            "e é ele que vai no lugar do endereço do favorito."
-        )
-        codigo = codigo_favorito()
-        if codigo:
-            st.code(codigo, language=None)
-        else:
-            st.warning("Arquivo do favorito não encontrado (ferramentas/bookmarklet_exportar_usuarios.txt).")
-
-        st.markdown("Depois siga os passos do seu navegador:")
-        aba_edge, aba_chrome, aba_firefox = st.tabs(["Microsoft Edge", "Google Chrome", "Mozilla Firefox"])
-        with aba_edge:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Em qualquer página aberta, clique com o botão direito na barra de favoritos e escolha "
-                "**Adicionar esta página aos favoritos**. Clique em **Concluído**;\n"
-                "3. Clique com o botão direito no favorito que acabou de aparecer na barra e escolha **Editar**;\n"
-                "4. Em **Nome**, escreva `Exportar usuários`;\n"
-                "5. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
-                "6. Clique em **Salvar**."
-            )
-        with aba_chrome:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar página...**;\n"
-                "3. Em **Nome**, escreva `Exportar usuários`;\n"
-                "4. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
-                "5. Clique em **Salvar**."
-            )
-        with aba_firefox:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar favorito...**;\n"
-                "3. Em **Nome**, escreva `Exportar usuários`;\n"
-                "4. Em **URL**, cole o código copiado;\n"
-                "5. Clique em **Salvar**."
-            )
-        st.caption("Ao final, o favorito **Exportar usuários** aparece na barra de favoritos. Não é preciso criar de novo nas próximas vezes.")
+        render_criar_favorito()
 
         # --- Passo 2 e 3: exportar ---
         st.markdown(

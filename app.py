@@ -48,6 +48,7 @@ from abas.aba1_validacao import render_aba1
 from abas.aba2_inativacao import render_aba2
 from abas.aba3_participantes import render_aba3
 from abas.aba4_usuarios_modulos import render_aba4
+from abas.aba5_funcionarios_modulos import render_aba5
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -68,13 +69,18 @@ apply_style()
 # E os resultados da Aba 4:
 #   t4_val1_ok / t4_val1_faltantes / t4_val1_fora_auth / t4_val2 / t4_val3 / t4_val_email / t4_val4: resultado de cada validação
 #   t4_tem_uuid / t4_bases_vazias / t4_tenant: informações para a tela de resultados
+# E os resultados da Aba 5:
+#   t5_processed / t5_tenant: processamento e tenant
+#   t5_final / t5_resumo / t5_planilhas / t5_mod_verificados: relatório completo, resumo, planilhas do Excel e módulos verificados
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "", 't1_mod_verificados': [],
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
     't3_processed': False, 't3_df_fix': pd.DataFrame(), 't3_df_not_found': pd.DataFrame(),
     't3_df_desligados': pd.DataFrame(), 't3_len_total': 0, 't3_qtd_mindsight': 0, 't3_tenant': "", 't3_nome_rodada': "",
     't4_processed': False, 't4_tenant': "", 't4_val1_ok': pd.DataFrame(), 't4_val1_faltantes': pd.DataFrame(), 't4_val1_fora_auth': pd.DataFrame(),
-    't4_val2': pd.DataFrame(), 't4_val3': pd.DataFrame(), 't4_val_email': pd.DataFrame(), 't4_val4': pd.DataFrame(), 't4_tem_uuid': False, 't4_bases_vazias': []
+    't4_val2': pd.DataFrame(), 't4_val3': pd.DataFrame(), 't4_val_email': pd.DataFrame(), 't4_val4': pd.DataFrame(), 't4_tem_uuid': False, 't4_bases_vazias': [],
+    't5_processed': False, 't5_tenant': "", 't5_final': pd.DataFrame(), 't5_resumo': pd.DataFrame(), 't5_planilhas': {},
+    't5_mod_verificados': []
 }
 
 for chave, valor in chaves_memoria.items():
@@ -117,6 +123,7 @@ st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
 st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
 st.sidebar.markdown("🎯 Participantes da Rodada")
 st.sidebar.markdown("🔍 Usuários x Módulos")
+st.sidebar.markdown("👥 Funcionários x Módulos")
 
 # =============================================================================
 # CORPO PRINCIPAL
@@ -124,7 +131,7 @@ st.sidebar.markdown("🔍 Usuários x Módulos")
 st.title("Canivete Suíço de Acessos")
 
 # Criação das abas visuais
-# Observação: por enquanto apenas as Abas 1 a 4 estão implementadas; as demais ainda estão vazias.
+# Observação: por enquanto apenas as Abas 1 a 5 estão implementadas; a Aba 6 ainda está vazia.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
@@ -146,3 +153,6 @@ with tab3:
 
 with tab4:
     render_aba4()
+
+with tab5:
+    render_aba5()
