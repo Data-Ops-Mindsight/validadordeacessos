@@ -101,6 +101,15 @@ logo = next((f for f in ["mindsight_logo.svg", "mindsight_logo.png"] if os.path.
 if logo:
     try:
         st.logo(logo, size="large")
+        # O st.logo limita a altura da imagem; este CSS deixa a logo ocupar a largura da barra lateral
+        st.markdown("""
+            <style>
+            [data-testid="stSidebarHeader"] { height: auto !important; align-items: flex-start; padding-top: 1.5rem; padding-bottom: 0.5rem; }
+            [data-testid="stSidebarHeader"] > div:has(> [data-testid="stSidebarLogo"]),
+            [data-testid="stSidebarHeader"] > a:has([data-testid="stSidebarLogo"]) { flex: 1; }
+            img[data-testid="stSidebarLogo"] { height: auto !important; max-height: none !important; max-width: none !important; width: 90% !important; }
+            </style>
+        """, unsafe_allow_html=True)
     except Exception:
         st.sidebar.markdown("### **mindsight**")
 else:
