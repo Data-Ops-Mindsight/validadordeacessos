@@ -10,8 +10,11 @@ Como funciona (mesmo fluxo da tela de login):
      login do auth.mindsight.com.br, preenche o formulário e envia.
   2. Etapa 2: a Mindsight envia um token para o email. O usuário digita o token
      no app, que envia o segundo formulário.
-  3. Com o login concluído, os cookies da sessão ficam guardados APENAS na
-     memória da sessão do Streamlit (st.session_state['cookies_sessao']).
+  3. Com o login concluído, a sessão (requests.Session, com os cookies de cada
+     domínio da Mindsight) fica guardada APENAS na memória da sessão do
+     Streamlit (st.session_state['cookies_sessao']). Ela é reaproveitada nas
+     leituras do Performance e do Metas, para que cada sistema receba os seus
+     próprios cookies.
      Nada é salvo em disco e a senha não é guardada.
 
 O formulário é lido da própria página (campos ocultos, CSRF, nomes dos campos),
@@ -194,7 +197,7 @@ def render_login(prefixo="login"):
     """
     Mostra o bloco de login na Mindsight dentro da aba atual.
     prefixo: diferencia as chaves dos campos caso o bloco seja usado em mais de uma aba.
-    A sessão obtida fica em st.session_state['cookies_sessao'].
+    A sessão obtida (requests.Session) fica em st.session_state['cookies_sessao'].
     """
     for chave in ['cookies_sessao', 'login_sessao', 'login_contexto', 'login_tenant']:
         st.session_state.setdefault(chave, None)
@@ -229,7 +232,7 @@ def render_login(prefixo="login"):
             else:
                 try:
                     sessao = confirmar_token(st.session_state['login_sessao'], st.session_state['login_contexto'], token)
-                    st.session_state['cookies_sessao'] = sessao.cookies.get_dict()
+                    st.session_state['cookies_sessao'] = sessao
                     st.session_state['login_sessao'] = None
                     st.session_state['login_contexto'] = None
                     st.rerun()
@@ -258,7 +261,7 @@ def render_login(prefixo="login"):
                 sessao, contexto = iniciar_login(tenant, email, senha)
             st.session_state['login_tenant'] = tenant.strip()
             if contexto is None:
-                st.session_state['cookies_sessao'] = sessao.cookies.get_dict()
+                st.session_state['cookies_sessao'] = sessao
             else:
                 st.session_state['login_sessao'] = sessao
                 st.session_state['login_contexto'] = contexto

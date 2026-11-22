@@ -236,20 +236,38 @@ def ler_perfomance_evaluation_rounds(cliente, token_performance):
 # =============================================================================
 # LEITURA DAS TELAS DE ADMIN (DJANGO ADMIN) - PERFORMANCE E METAS
 # =============================================================================
+def _diagnostico_sessao(sessao, resposta):
+    """
+    Monta um resumo técnico (sem valores de cookies) para entender por que a
+    tela de admin pediu login: o caminho de redirecionamentos e quais cookies
+    a sessão tem em cada domínio.
+    """
+    caminho = [r.url.split('?')[0] for r in resposta.history] + [resposta.url.split('?')[0]]
+    cookies = sorted({f"{c.name} ({c.domain})" for c in sessao.cookies})
+    return ("Detalhes técnicos: redirecionamentos = " + " → ".join(caminho)
+            + " | cookies da sessão = " + (", ".join(cookies) or "nenhum"))
+
+
 def extrair_django_admin(url_base, cookies, descricao="o admin"):
     """
     Lê a tabela de usuários de uma tela do Django Admin, página por página.
 
     url_base: endereço da listagem (ex.: .../staff/accounts/user/).
-    cookies:  cookies da sessão obtidos no Login Mindsight.
+    cookies:  sessão (requests.Session) do Login Mindsight, ou um dicionário de cookies.
     Retorna um DataFrame com username, first_name, last_name, email, is_active e uuid.
 
     A paginação do Django Admin usa o parâmetro 'p'. Dependendo da versão a
     primeira página é p=0 ou p=1, então o laço tenta a partir de 0 e para quando
     uma página não traz nenhum usuário novo.
     """
-    sessao = requests.Session()
-    requests.utils.add_dict_to_cookiejar(sessao.cookies, cookies)
+    # Reaproveita a sessão do Login Mindsight, que guarda os cookies separados por
+    # domínio (auth, performance, acompanhamento...). Se vier um dicionário de
+    # cookies (formato antigo), monta uma sessão com ele.
+    if isinstance(cookies, requests.Session):
+        sessao = cookies
+    else:
+        sessao = requests.Session()
+        requests.utils.add_dict_to_cookiejar(sessao.cookies, cookies)
     usuarios = {}
     pagina = 0
     paginas_sem_tabela = 0
@@ -262,7 +280,8 @@ def extrair_django_admin(url_base, cookies, descricao="o admin"):
             raise ErroAPI(f"Não foi possível conectar à tela de admin ao buscar {descricao}.")
         if "login" in resposta.url:
             raise ErroAPI(f"A sessão expirou ou seu usuário não tem acesso ao admin ao buscar {descricao}. "
-                          "Faça o Login Mindsight novamente.")
+                          "Faça o Login Mindsight novamente.\n\n"
+                          + _diagnostico_sessao(sessao, resposta))
 
         soup = BeautifulSoup(resposta.text, 'html.parser')
         tabela = soup.select_one("#result_list tbody")
