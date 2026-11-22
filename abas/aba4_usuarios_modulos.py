@@ -79,9 +79,8 @@ def render_aba4():
         "💡 **O que esta aba faz?** Compara os usuários do **Auth** (base enviada) com os usuários do "
         "**Controle**, **People Hub (Full)**, **Performance** e **Metas**. Todos os usuários do Auth são "
         "considerados, **inclusive os inativos**.\n\n"
-        "📥 Os usuários do **Performance** e do **Metas** não vêm completos pela API (faltam campos como "
-        "o UUID). Por isso eles são exportados das telas de administração com o favorito **Exportar usuários**, "
-        "no seu navegador já logado, e enviados aqui em CSV (veja o passo a passo abaixo).\n\n"
+        "📥 Os usuários do **Performance** e do **Metas** precisam ser enviados em CSV, gerados com o favorito "
+        "**Exportar usuários** (veja o passo a passo em *Como gerar os CSVs do Performance e do Metas*).\n\n"
         "🚫 **Usuários da Mindsight são desconsiderados** nesta validação.\n\n"
         "📄 **Validações geradas:**\n"
         "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando;\n"
@@ -109,24 +108,79 @@ def render_aba4():
 
     # Passo a passo para gerar os CSVs do Performance e do Metas
     with st.expander("❓ Como gerar os CSVs do Performance e do Metas"):
+        # --- Por que a exportação é feita assim ---
         st.markdown(
-            "**Por que assim?** As telas de administração do Performance e do Metas só abrem para quem está "
-            "logado (com digital/chave de segurança e código por email). A ferramenta não consegue fazer esse "
-            "login sozinha, então você exporta os usuários **no seu navegador, que já está logado**, e envia o "
-            "arquivo aqui. Nada de senha ou cookie passa pela ferramenta.\n\n"
-            "**1. Crie o favorito (só na primeira vez):** clique com o botão direito na barra de favoritos → "
-            "*Adicionar página/favorito*. Dê o nome **Exportar usuários** e, no campo **URL**, cole o código abaixo.\n\n"
-            "**2. Exporte do Performance:** abra `https://performance.mindsight.com.br/<tenant>/staff/accounts/user/` "
-            "e clique no favorito. Um arquivo `performance_<tenant>_usuarios.csv` será baixado.\n\n"
-            "**3. Exporte do Metas:** abra `https://acompanhamento.mindsight.com.br/<tenant>/admin/accounts/user/` "
-            "e clique no favorito. Um arquivo `metas_<tenant>_usuarios.csv` será baixado.\n\n"
-            "**4.** Envie os dois arquivos nos campos abaixo, junto com a base do Auth."
+            "#### Por que é preciso exportar assim?\n"
+            "- No **Performance**, o admin do Django **não tem a opção de exportar** os usuários;\n"
+            "- No **Metas**, a exportação do Django **não traz o UUID** dos usuários;\n"
+            "- Pela **API**, essas informações também não vêm.\n\n"
+            "Por isso usamos um **favorito do navegador** chamado **Exportar usuários**. Ao clicar nele, com a tela "
+            "de usuários do admin aberta, ele percorre **todas as páginas** da tabela e baixa um arquivo CSV com "
+            "usuário, email, nome, sobrenome, status e UUID. Ele usa o login que você já tem aberto no navegador e "
+            "**apenas lê** a tabela: nada é alterado no sistema."
+        )
+
+        # --- Passo 1: criar o favorito ---
+        st.markdown(
+            "#### Passo 1 - Criar o favorito (só na primeira vez)\n"
+            "Copie o código abaixo (ícone de copiar no canto direito da caixa). Ele começa com `javascript:` "
+            "e é ele que vai no lugar do endereço do favorito."
         )
         codigo = _codigo_favorito()
         if codigo:
             st.code(codigo, language=None)
         else:
             st.warning("Arquivo do favorito não encontrado (ferramentas/bookmarklet_exportar_usuarios.txt).")
+
+        st.markdown("Depois siga os passos do seu navegador:")
+        aba_edge, aba_chrome, aba_firefox = st.tabs(["Microsoft Edge", "Google Chrome", "Mozilla Firefox"])
+        with aba_edge:
+            st.markdown(
+                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+                "2. Em qualquer página aberta, clique com o botão direito na barra de favoritos e escolha "
+                "**Adicionar esta página aos favoritos**. Clique em **Concluído**;\n"
+                "3. Clique com o botão direito no favorito que acabou de aparecer na barra e escolha **Editar**;\n"
+                "4. Em **Nome**, escreva `Exportar usuários`;\n"
+                "5. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
+                "6. Clique em **Salvar**."
+            )
+        with aba_chrome:
+            st.markdown(
+                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar página...**;\n"
+                "3. Em **Nome**, escreva `Exportar usuários`;\n"
+                "4. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
+                "5. Clique em **Salvar**."
+            )
+        with aba_firefox:
+            st.markdown(
+                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
+                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar favorito...**;\n"
+                "3. Em **Nome**, escreva `Exportar usuários`;\n"
+                "4. Em **URL**, cole o código copiado;\n"
+                "5. Clique em **Salvar**."
+            )
+        st.caption("Ao final, o favorito **Exportar usuários** aparece na barra de favoritos. Não é preciso criar de novo nas próximas vezes.")
+
+        # --- Passo 2 e 3: exportar ---
+        st.markdown(
+            "#### Passo 2 - Exportar os usuários do Performance\n"
+            "1. Entre no Performance normalmente (com o seu login de sempre);\n"
+            "2. Abra a tela de usuários do admin: `https://performance.mindsight.com.br/<tenant>/staff/accounts/user/` "
+            "(troque `<tenant>` pelo tenant do cliente);\n"
+            "3. Clique no favorito **Exportar usuários**. Um aviso roxo aparece no canto superior direito mostrando "
+            "o andamento;\n"
+            "4. Ao terminar, o arquivo `performance_<tenant>_usuarios.csv` é baixado.\n\n"
+            "#### Passo 3 - Exportar os usuários do Metas\n"
+            "1. Abra a tela de usuários do admin do Metas: `https://acompanhamento.mindsight.com.br/<tenant>/admin/accounts/user/`;\n"
+            "2. Clique no favorito **Exportar usuários**;\n"
+            "3. Ao terminar, o arquivo `metas_<tenant>_usuarios.csv` é baixado.\n\n"
+            "#### Passo 4 - Enviar os arquivos\n"
+            "Envie nos campos abaixo a **base do Auth**, o **CSV do Performance** e o **CSV do Metas**, "
+            "preencha o tenant e os tokens e clique em **Processar Validações de Módulos**."
+        )
+        st.caption("💡 Se o favorito mostrar “Abra a tela de usuários do admin”, confira se você está na tela "
+                   "`accounts/user/` (lista de usuários) e logado no módulo.")
 
     c4, c5, c6 = st.columns(3)
     arquivo_auth_t4 = c4.file_uploader("Base do Auth (.csv)", type=['csv'], key="arquivo_auth_t4")
