@@ -95,6 +95,16 @@ def carregar_dados_hub(tenant, token):
     cargos = chamar_api("os cargos do People Hub", get_hub_positions_api, tenant, token)
     hierarquia = chamar_api("a hierarquia de áreas do People Hub", get_hub_area_hierarchy_api, tenant, token)
     regras = chamar_api("as regras de acesso do People Hub", get_hub_access_rules_api, tenant, token)
+    niveis = chamar_api("os níveis de senioridade do People Hub", get_hub_seniority_levels_api, tenant, token)
+
+    # Níveis de senioridade cadastrados: id -> nome (coluna level), na ordem do cadastro
+    mapa_niveis, lista_niveis = {}, []
+    if niveis is not None and not niveis.empty and {'id', 'level'}.issubset(niveis.columns):
+        n = niveis.copy()
+        n['_id'] = n['id'].apply(_id)
+        n = n.sort_values('id', key=lambda c: pd.to_numeric(c, errors='coerce'))
+        mapa_niveis = dict(zip(n['_id'], n['level'].apply(_texto)))
+        lista_niveis = [l for l in n['level'].apply(_texto) if l]
 
     # --- Base de funcionários ativos: uma linha por person ---
     base = pd.DataFrame({
@@ -106,10 +116,14 @@ def carregar_dados_hub(tenant, token):
         'Área': func['area'].apply(_texto) if 'area' in func.columns else '',
     }).drop_duplicates('person_id')
     emp_atual = _atual_por_pessoa(empresas, ['name'])
-    cargo_atual = _atual_por_pessoa(cargos, ['name', 'level'])
+    cargo_atual = _atual_por_pessoa(cargos, ['name', 'level', 'seniority_level'])
     base['Empresa'] = base['person_id'].map(emp_atual['name']).apply(_texto)
     base['Cargo'] = base['person_id'].map(cargo_atual['name']).apply(_texto)
-    base['Senioridade'] = base['person_id'].map(cargo_atual['level']).apply(_texto)
+    # Senioridade do cargo atual: pelo nível de senioridade ligado ao cargo (seniority_level);
+    # se não houver, usa o texto 'level' do próprio cargo
+    sen_id = base['person_id'].map(cargo_atual['seniority_level']).apply(_id)
+    sen_txt = base['person_id'].map(cargo_atual['level']).apply(_texto)
+    base['Senioridade'] = [mapa_niveis.get(i) or t for i, t in zip(sen_id, sen_txt)]
 
     # --- Hierarquia de áreas vigente (sem data de fim): pai -> filhas, pelo nome ---
     filhas, pai = {}, {}
@@ -142,7 +156,7 @@ def carregar_dados_hub(tenant, token):
                            {_texto(n) for n in empresas.get('name', pd.Series(dtype=str)) if _texto(n)}),
         'areas': sorted(a for a in areas if a),
         'cargos': sorted(c for c in base['Cargo'].unique() if c),
-        'senioridades': sorted(s for s in base['Senioridade'].unique() if s),
+        'senioridades': list(dict.fromkeys(lista_niveis)) or sorted(s for s in base['Senioridade'].unique() if s),
     }
     return {'base': base, 'filhas': filhas, 'regras': regras, 'opcoes': opcoes}
 
