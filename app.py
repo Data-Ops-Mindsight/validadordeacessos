@@ -51,6 +51,7 @@ from abas.aba4_usuarios_modulos import render_aba4
 from abas.aba5_funcionarios_modulos import render_aba5
 from abas.aba6_regras_bps import render_aba6
 from abas.aba7_senhas import render_aba7
+from abas.aba8_salarios import render_aba8
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -78,6 +79,7 @@ apply_style()
 #   t6_dados / t6_tenant: dados carregados do People Hub e tenant
 #   t6_processed / t6_csv / t6_novas / t6_existentes / t6_resumo: regras calculadas e relatórios
 #   t7_processed / t7_tenant / t7_cliente / t7_script / t7_fora / t7_resumo: senhas geradas e relatórios
+#   t8_processed / t8_tenant / t8_resultado: validação de salários (resumo e tabelas)
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "", 't1_mod_verificados': [],
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
@@ -90,7 +92,8 @@ chaves_memoria = {
     't6_dados': None, 't6_tenant': "", 't6_processed': False, 't6_csv': pd.DataFrame(), 't6_novas': pd.DataFrame(),
     't6_existentes': pd.DataFrame(), 't6_resumo': pd.DataFrame(),
     't7_processed': False, 't7_tenant': "", 't7_cliente': pd.DataFrame(), 't7_script': pd.DataFrame(),
-    't7_fora': pd.DataFrame(), 't7_resumo': pd.DataFrame()
+    't7_fora': pd.DataFrame(), 't7_resumo': pd.DataFrame(),
+    't8_processed': False, 't8_tenant': "", 't8_resultado': {}
 }
 
 for chave, valor in chaves_memoria.items():
@@ -121,14 +124,6 @@ else:
 
 
 # =============================================================================
-# PÁGINAS EM CONSTRUÇÃO (só para visualizar o layout)
-# =============================================================================
-def render_salarios():
-    st.header("Validação de Salários")
-    st.info("🚧 Em construção.")
-
-
-# =============================================================================
 # MENU DE NAVEGAÇÃO (barra lateral, agrupado por assunto)
 # =============================================================================
 # Cada ferramenta é uma página com endereço próprio (ex.: .../regras-bps) e só a
@@ -147,7 +142,7 @@ paginas = {
     ],
     "People Hub / Organograma": [
         st.Page(render_aba6, title="Regras de Acessos (BPs)", icon="🛠️", url_path="regras-bps"),
-        st.Page(render_salarios, title="Validação de Salários", icon="💰", url_path="validacao-salarios"),
+        st.Page(render_aba8, title="Validação de Salários", icon="💰", url_path="validacao-salarios"),
     ],
 }
 pagina = st.navigation(paginas, position="sidebar")
