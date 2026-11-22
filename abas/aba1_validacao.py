@@ -4,7 +4,7 @@ Aba 1 - Validação de Acessos dos colaboradores ATIVOS.
 Fluxo da aba:
   1. O usuário informa tenant, tokens e as regras de acesso desejadas.
   2. Faz upload da base de usuários exportada do Auth (.csv) e, opcionalmente,
-     dos CSVs de usuários do Performance e do Metas (favorito "Exportar usuários").
+     dos CSVs de usuários do Performance e do Metas (favorito "Exportar dados do Django").
   3. Ao clicar em "Processar Validação", a ferramenta:
        - busca no Controle quem está ativo (e, se preciso, quem é gestor);
        - busca no People Hub (Full) quem já está ativo lá (se houver token);
@@ -92,7 +92,7 @@ def render_aba1():
         "**alterado** (tudo minúsculo) no Passo 1 e volta ao **nome original** no Passo 2. A troca gera a "
         "tarefa de alteração do usuário, que cria o usuário no módulo.\n\n"
         "Para o People Hub a situação vem da API (token do Full). Para o **Metas** e o **Performance**, envie "
-        "os CSVs gerados pelo favorito **Exportar usuários** (opcional: sem o CSV, os tricks daquele módulo "
+        "os CSVs gerados pelo favorito **Exportar dados do Django** (opcional: sem o CSV, os tricks daquele módulo "
         "não são verificados)."
     )
 

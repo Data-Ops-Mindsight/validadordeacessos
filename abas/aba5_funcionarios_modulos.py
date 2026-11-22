@@ -9,8 +9,8 @@ De onde vem cada informação:
     cargo e área atuais;
   - People Hub: CSV exportado do admin (liga o person ao employee_code e traz o UUID)
     + API (cargo, área, gestor e usernames);
-  - Performance: CSV de participants gerado pelo favorito "Exportar usuários";
-  - Metas: CSV de persons gerado pelo favorito "Exportar usuários".
+  - Performance: CSV de participants gerado pelo favorito "Exportar dados do Django";
+  - Metas: CSV de persons gerado pelo favorito "Exportar dados do Django".
 
 Verificações (uma linha por funcionário do Controle):
   - existe no módulo;
@@ -218,7 +218,7 @@ def render_aba5():
             "O UUID e o usuário só aparecem ao abrir cada participant;\n"
             "- **Metas:** a exportação de persons traz o usuário e o gestor só como números (ids), e a "
             "tabela não mostra o UUID.\n\n"
-            "No Performance e no Metas usamos o favorito **Exportar usuários**: na tela de listagem, ele abre "
+            "No Performance e no Metas usamos o favorito **Exportar dados do Django**: na tela de listagem, ele abre "
             "por trás a página de **cada** registro (várias ao mesmo tempo), lê os campos e baixa um CSV. Ele "
             "usa o login que já está aberto no navegador e **apenas lê**: nada é alterado."
         )
@@ -232,11 +232,11 @@ def render_aba5():
             "`76706119288` em `7.67E+10` e o código se perde.\n\n"
             "#### Passo 3 - Exportar os participants do Performance\n"
             "1. Abra `https://performance.mindsight.com.br/<tenant>/staff/participants/participant/`;\n"
-            "2. Clique no favorito **Exportar usuários**. O aviso roxo mostra o andamento (ele abre cada participant);\n"
+            "2. Clique no favorito **Exportar dados do Django**. O aviso roxo mostra o andamento (ele abre cada participant);\n"
             "3. Ao terminar, o arquivo `performance_<tenant>_participantes.csv` é baixado.\n\n"
             "#### Passo 4 - Exportar os persons do Metas\n"
             "1. Abra `https://acompanhamento.mindsight.com.br/<tenant>/admin/person/person/`;\n"
-            "2. Clique no favorito **Exportar usuários**;\n"
+            "2. Clique no favorito **Exportar dados do Django**;\n"
             "3. Ao terminar, o arquivo `metas_<tenant>_persons.csv` é baixado.\n\n"
             "#### Passo 5 - Enviar os arquivos\n"
             "Envie os arquivos nos campos abaixo, preencha o tenant e os tokens e clique em "

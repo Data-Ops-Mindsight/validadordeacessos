@@ -1,5 +1,5 @@
 /*
- * Exportar usuários do Django Admin (Performance, Metas e Hub) - código-fonte do favorito.
+ * Favorito "Exportar dados do Django" (Performance, Metas e Hub) - código-fonte.
  *
  * Como usar:
  *   1. Crie um favorito no navegador e cole no campo URL o conteúdo de

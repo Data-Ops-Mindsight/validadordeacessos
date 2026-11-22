@@ -4,7 +4,7 @@ Aba 4 - Validação de USUÁRIOS entre os módulos.
 Cruza os usuários do Auth (CSV enviado) com os usuários de cada módulo:
   - Controle e People Hub (Full): lidos pela API, com token;
   - Performance e Metas: CSVs exportados das telas de admin pelo favorito
-    "Exportar usuários" (ferramentas/bookmarklet_exportar_usuarios.txt).
+    "Exportar dados do Django" (ferramentas/bookmarklet_exportar_usuarios.txt).
 
 Validações geradas (cada uma com um Excel para baixar):
   1. Presença: em quais módulos cada usuário do Auth existe (pelo username);
@@ -51,7 +51,7 @@ def render_aba4():
         "**Controle**, **People Hub (Full)**, **Performance** e **Metas**. Todos os usuários do Auth são "
         "considerados, **inclusive os inativos**.\n\n"
         "📥 Os usuários do **Performance** e do **Metas** precisam ser enviados em CSV, gerados com o favorito "
-        "**Exportar usuários** (veja o passo a passo em *Como gerar os CSVs do Performance e do Metas*).\n\n"
+        "**Exportar dados do Django** (veja o passo a passo em *Como gerar os CSVs do Performance e do Metas*).\n\n"
         "🚫 **Usuários da Mindsight são desconsiderados** nesta validação.\n\n"
         "📄 **Validações geradas:**\n"
         "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando, e "
