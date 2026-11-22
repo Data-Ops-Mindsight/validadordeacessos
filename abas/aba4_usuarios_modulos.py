@@ -3,7 +3,8 @@ Aba 4 - Validação de USUÁRIOS entre os módulos.
 
 Cruza os usuários do Auth (CSV enviado) com os usuários de cada módulo:
   - Controle e People Hub (Full): lidos pela API, com token;
-  - Performance e Metas: lidos das telas de admin, usando o Login Mindsight feito nesta aba.
+  - Performance e Metas: CSVs exportados das telas de admin pelo favorito
+    "Exportar usuários" (ferramentas/bookmarklet_exportar_usuarios.txt).
 
 Validações geradas (cada uma com um Excel para baixar):
   1. Presença: em quais módulos cada usuário do Auth existe (pelo username);
@@ -15,15 +16,44 @@ Validações geradas (cada uma com um Excel para baixar):
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
 import time
 
 # Como o arquivo é executado a partir do app.py (na raiz), importamos diretamente
 from functions import *
-from login_mindsight import render_login
 
 MIME_EXCEL = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MODULOS = ['Controle', 'Full', 'Performance', 'Metas']
 VAZIOS = ['nan', 'none', '', '-']
+
+# Favorito (bookmarklet) que exporta os usuários das telas de admin em CSV
+ARQUIVO_FAVORITO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'ferramentas', 'bookmarklet_exportar_usuarios.txt')
+
+
+def _codigo_favorito():
+    """Lê o código do favorito para exibir na tela (vazio se o arquivo não existir)."""
+    try:
+        with open(ARQUIVO_FAVORITO, encoding='utf-8') as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _ler_csv_modulo(arquivo, nome_modulo, prefixo_esperado):
+    """
+    Lê o CSV exportado pelo favorito para um módulo (Performance ou Metas).
+    Confere se é o arquivo certo (pelo nome) e se tem a coluna username.
+    """
+    nome_arquivo = (arquivo.name or "").lower()
+    outros = {'performance_', 'metas_'} - {prefixo_esperado}
+    if any(nome_arquivo.startswith(o) for o in outros):
+        raise ValueError(f"o arquivo enviado em '{nome_modulo}' parece ser de outro módulo ({arquivo.name}).")
+    df = ler_csv_seguro(arquivo)
+    if 'username' not in df.columns:
+        raise ValueError(f"o CSV do {nome_modulo} não possui a coluna 'username'. "
+                         "Gere o arquivo pelo favorito 'Exportar usuários'.")
+    return df
 
 
 def _limpar_base(df):
@@ -49,8 +79,9 @@ def render_aba4():
         "💡 **O que esta aba faz?** Compara os usuários do **Auth** (base enviada) com os usuários do "
         "**Controle**, **People Hub (Full)**, **Performance** e **Metas**. Todos os usuários do Auth são "
         "considerados, **inclusive os inativos**.\n\n"
-        "🔐 O Performance e o Metas são lidos das telas de admin, por isso é preciso fazer o "
-        "**Login Mindsight** logo abaixo.\n\n"
+        "📥 Os usuários do **Performance** e do **Metas** não vêm completos pela API (faltam campos como "
+        "o UUID). Por isso eles são exportados das telas de administração com o favorito **Exportar usuários**, "
+        "no seu navegador já logado, e enviados aqui em CSV (veja o passo a passo abaixo).\n\n"
         "🚫 **Usuários da Mindsight são desconsiderados** nesta validação.\n\n"
         "📄 **Validações geradas:**\n"
         "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando;\n"
@@ -61,14 +92,7 @@ def render_aba4():
     )
 
     # -------------------------------------------------------------------------
-    # SEÇÃO 1: LOGIN MINDSIGHT (para ler as telas de admin do Performance e do Metas)
-    # -------------------------------------------------------------------------
-    render_login(prefixo="t4_login")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # -------------------------------------------------------------------------
-    # SEÇÃO 2: CREDENCIAIS
+    # SEÇÃO 1: CREDENCIAIS
     # -------------------------------------------------------------------------
     st.markdown("### 🔑 Credenciais de Acesso")
     c1, c2, c3 = st.columns(3)
@@ -79,19 +103,45 @@ def render_aba4():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # SEÇÃO 3: BASE DO AUTH E PROCESSAMENTO
+    # SEÇÃO 2: BASES (AUTH, PERFORMANCE E METAS) E PROCESSAMENTO
     # -------------------------------------------------------------------------
-    st.markdown("### 📁 Base de Usuários (Auth)")
-    arquivo_auth_t4 = st.file_uploader("Faça o upload da base exportada do Auth (.csv)", type=['csv'], key="arquivo_auth_t4")
+    st.markdown("### 📁 Bases de Usuários")
+
+    # Passo a passo para gerar os CSVs do Performance e do Metas
+    with st.expander("❓ Como gerar os CSVs do Performance e do Metas"):
+        st.markdown(
+            "**Por que assim?** As telas de administração do Performance e do Metas só abrem para quem está "
+            "logado (com digital/chave de segurança e código por email). A ferramenta não consegue fazer esse "
+            "login sozinha, então você exporta os usuários **no seu navegador, que já está logado**, e envia o "
+            "arquivo aqui. Nada de senha ou cookie passa pela ferramenta.\n\n"
+            "**1. Crie o favorito (só na primeira vez):** clique com o botão direito na barra de favoritos → "
+            "*Adicionar página/favorito*. Dê o nome **Exportar usuários** e, no campo **URL**, cole o código abaixo.\n\n"
+            "**2. Exporte do Performance:** abra `https://performance.mindsight.com.br/<tenant>/staff/accounts/user/` "
+            "e clique no favorito. Um arquivo `performance_<tenant>_usuarios.csv` será baixado.\n\n"
+            "**3. Exporte do Metas:** abra `https://acompanhamento.mindsight.com.br/<tenant>/admin/accounts/user/` "
+            "e clique no favorito. Um arquivo `metas_<tenant>_usuarios.csv` será baixado.\n\n"
+            "**4.** Envie os dois arquivos nos campos abaixo, junto com a base do Auth."
+        )
+        codigo = _codigo_favorito()
+        if codigo:
+            st.code(codigo, language=None)
+        else:
+            st.warning("Arquivo do favorito não encontrado (ferramentas/bookmarklet_exportar_usuarios.txt).")
+
+    c4, c5, c6 = st.columns(3)
+    arquivo_auth_t4 = c4.file_uploader("Base do Auth (.csv)", type=['csv'], key="arquivo_auth_t4")
+    arquivo_perf_t4 = c5.file_uploader("Usuários do Performance (.csv)", type=['csv'], key="arquivo_perf_t4",
+                                       help="Arquivo performance_<tenant>_usuarios.csv gerado pelo favorito.")
+    arquivo_metas_t4 = c6.file_uploader("Usuários do Metas (.csv)", type=['csv'], key="arquivo_metas_t4",
+                                        help="Arquivo metas_<tenant>_usuarios.csv gerado pelo favorito.")
 
     if st.button("Processar Validações de Módulos", key="btn_t4"):
-        if not tenant_t4 or not token_controle_t4 or not token_full_t4 or not arquivo_auth_t4:
-            st.error("Preencha o Tenant, os tokens do Controle e do Full e faça o upload da base.")
-        elif not st.session_state.get('cookies_sessao'):
-            st.error("⚠️ Faça o Login Mindsight no topo desta aba primeiro (necessário para ler o Performance e o Metas).")
+        if not tenant_t4 or not token_controle_t4 or not token_full_t4:
+            st.error("Preencha o Tenant e os tokens do Controle e do Full.")
+        elif not arquivo_auth_t4 or not arquivo_perf_t4 or not arquivo_metas_t4:
+            st.error("Envie os três arquivos: base do Auth, usuários do Performance e usuários do Metas.")
         else:
             bar = st.progress(0, text="Iniciando...")
-            cookies = st.session_state['cookies_sessao']
             try:
                 # --- 1/5: base do Auth ---
                 bar.progress(10, text="1/5 - Lendo a base do Auth...")
@@ -111,17 +161,13 @@ def render_aba4():
                 df_full = _limpar_base(chamar_api("os usuários do People Hub (Full)",
                                                   ler_usuarios_full, tenant_t4, token_full_t4))
 
-                # --- 4/5: Performance (tela de admin) ---
+                # --- 4/5: Performance (CSV exportado pelo favorito) ---
                 bar.progress(65, text="4/5 - Lendo usuários do Performance...")
-                df_perf = _limpar_base(extrair_django_admin(
-                    f"https://performance.mindsight.com.br/{tenant_t4}/staff/accounts/user/", cookies,
-                    "os usuários do Performance"))
+                df_perf = _limpar_base(_ler_csv_modulo(arquivo_perf_t4, "Performance", "performance_"))
 
-                # --- 5/5: Metas (tela de admin) ---
+                # --- 5/5: Metas (CSV exportado pelo favorito) ---
                 bar.progress(80, text="5/5 - Lendo usuários do Metas...")
-                df_metas = _limpar_base(extrair_django_admin(
-                    f"https://acompanhamento.mindsight.com.br/{tenant_t4}/admin/accounts/user/", cookies,
-                    "os usuários do Metas"))
+                df_metas = _limpar_base(_ler_csv_modulo(arquivo_metas_t4, "Metas", "metas_"))
 
                 bases = {'Controle': df_controle, 'Full': df_full, 'Performance': df_perf, 'Metas': df_metas}
                 bar.progress(92, text="Cruzando dados...")
@@ -185,7 +231,8 @@ def render_aba4():
                     for nome, base in bases.items():
                         if base.empty or 'uuid' not in base.columns:
                             continue
-                        mapa = base.drop_duplicates('username').set_index('username')['uuid'].astype(str).str.strip().str.lower().to_dict()
+                        base_uuid = base[base['uuid'].apply(_valido)]  # ignora UUID vazio
+                        mapa = base_uuid.drop_duplicates('username').set_index('username')['uuid'].astype(str).str.strip().str.lower().to_dict()
                         df_val4[f"UUID_{nome}"] = df_val4['username'].map(mapa)
                         df_val4[f"Match_{nome}"] = np.where(df_val4[f"UUID_{nome}"].isna(), 'Não Existe',
                                                             np.where(df_val4['UUID_Auth'] == df_val4[f"UUID_{nome}"], 'OK', 'Divergente'))

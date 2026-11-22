@@ -13,7 +13,6 @@ import pandas as pd
 import numpy as np
 import requests
 import io
-from bs4 import BeautifulSoup
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pandas import json_normalize
@@ -231,100 +230,6 @@ def ler_usuarios_performance(cliente, token_performance, rodada):
 def ler_perfomance_evaluation_rounds(cliente, token_performance):
     """Lista as rodadas de avaliação do Performance (usado para mostrar o nome da rodada)."""
     return func_api_get_base_parallel('performance', cliente, token_performance, 'evaluation_rounds')
-
-
-# =============================================================================
-# LEITURA DAS TELAS DE ADMIN (DJANGO ADMIN) - PERFORMANCE E METAS
-# =============================================================================
-def _diagnostico_sessao(sessao, resposta):
-    """
-    Monta um resumo técnico (sem valores de cookies) para entender por que a
-    tela de admin pediu login: o caminho de redirecionamentos e quais cookies
-    a sessão tem em cada domínio.
-    """
-    caminho = [r.url.split('?')[0] for r in resposta.history] + [resposta.url.split('?')[0]]
-    cookies = sorted({f"{c.name} ({c.domain})" for c in sessao.cookies})
-    return ("Detalhes técnicos: redirecionamentos = " + " → ".join(caminho)
-            + " | cookies da sessão = " + (", ".join(cookies) or "nenhum"))
-
-
-def extrair_django_admin(url_base, cookies, descricao="o admin"):
-    """
-    Lê a tabela de usuários de uma tela do Django Admin, página por página.
-
-    url_base: endereço da listagem (ex.: .../staff/accounts/user/).
-    cookies:  sessão (requests.Session) do Login Mindsight, ou um dicionário de cookies.
-    Retorna um DataFrame com username, first_name, last_name, email, is_active e uuid.
-
-    A paginação do Django Admin usa o parâmetro 'p'. Dependendo da versão a
-    primeira página é p=0 ou p=1, então o laço tenta a partir de 0 e para quando
-    uma página não traz nenhum usuário novo.
-    """
-    # Reaproveita a sessão do Login Mindsight, que guarda os cookies separados por
-    # domínio (auth, performance, acompanhamento...). Se vier um dicionário de
-    # cookies (formato antigo), monta uma sessão com ele.
-    if isinstance(cookies, requests.Session):
-        sessao = cookies
-    else:
-        sessao = requests.Session()
-        requests.utils.add_dict_to_cookiejar(sessao.cookies, cookies)
-    usuarios = {}
-    pagina = 0
-    paginas_sem_tabela = 0
-    tentou_pagina_extra = False
-
-    while True:
-        try:
-            resposta = sessao.get(f"{url_base}?p={pagina}", timeout=60)
-        except requests.exceptions.RequestException:
-            raise ErroAPI(f"Não foi possível conectar à tela de admin ao buscar {descricao}.")
-        if "login" in resposta.url:
-            raise ErroAPI(f"A sessão expirou ou seu usuário não tem acesso ao admin ao buscar {descricao}. "
-                          "Faça o Login Mindsight novamente.\n\n"
-                          + _diagnostico_sessao(sessao, resposta))
-
-        soup = BeautifulSoup(resposta.text, 'html.parser')
-        tabela = soup.select_one("#result_list tbody")
-        if resposta.status_code != 200 or not tabela:
-            # p=0 inválido (paginação começando em 1): tenta a próxima página uma vez
-            paginas_sem_tabela += 1
-            if pagina == 0 and paginas_sem_tabela == 1:
-                pagina += 1
-                continue
-            break
-
-        novos = 0
-        for linha in tabela.find_all("tr"):
-            username_elem = linha.select_one(".field-username") or linha.select_one("th a")
-            username = username_elem.text.strip() if username_elem else ""
-            if not username or username in usuarios:
-                continue
-            first_name_elem = linha.select_one(".field-first_name")
-            last_name_elem = linha.select_one(".field-last_name")
-            email_elem = linha.select_one(".field-email")
-            is_active_img = linha.select_one(".field-is_active img")
-            uuid_elem = linha.select_one(".field-uuid")
-            usuarios[username] = {
-                'username': username,
-                'first_name': first_name_elem.text.strip() if first_name_elem else "",
-                'last_name': last_name_elem.text.strip() if last_name_elem else "",
-                'email': email_elem.text.strip() if email_elem else "",
-                'is_active': 1 if is_active_img and is_active_img.get('alt') == 'True' else 0,
-                'uuid': uuid_elem.text.strip() if uuid_elem else "",
-            }
-            novos += 1
-        if novos == 0:
-            # Se p=0 e p=1 trouxeram a mesma página (paginação começando em 1),
-            # tenta mais uma página antes de concluir que acabou.
-            if pagina == 1 and not tentou_pagina_extra:
-                tentou_pagina_extra = True
-                pagina += 1
-                continue
-            break  # página repetida ou vazia: chegou ao fim
-        pagina += 1
-
-    return pd.DataFrame(list(usuarios.values()),
-                        columns=['username', 'first_name', 'last_name', 'email', 'is_active', 'uuid'])
 
 
 # =============================================================================
