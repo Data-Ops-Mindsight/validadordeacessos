@@ -183,37 +183,49 @@ def confirmar_token(sessao, contexto, token):
 
 
 # =============================================================================
-# BLOCO DE LOGIN NA BARRA LATERAL
+# BLOCO DE LOGIN (exibido dentro da aba que precisa dele)
 # =============================================================================
 def _limpar_login():
     for chave in ['cookies_sessao', 'login_sessao', 'login_contexto', 'login_tenant']:
         st.session_state[chave] = None
 
 
-def render_login_sidebar():
-    """Mostra o login na barra lateral (necessário para as abas que leem Performance e Metas)."""
+def render_login(prefixo="login"):
+    """
+    Mostra o bloco de login na Mindsight dentro da aba atual.
+    prefixo: diferencia as chaves dos campos caso o bloco seja usado em mais de uma aba.
+    A sessão obtida fica em st.session_state['cookies_sessao'].
+    """
     for chave in ['cookies_sessao', 'login_sessao', 'login_contexto', 'login_tenant']:
         st.session_state.setdefault(chave, None)
 
-    st.sidebar.header("🔐 Login Mindsight")
-    st.sidebar.caption("Necessário para as abas que leem o Performance e o Metas.")
+    st.markdown("### 🔐 Login Mindsight")
+    st.caption(
+        "**Por que fazer login?** Os usuários do **Performance** e do **Metas** não estão disponíveis pela API "
+        "com todos os campos necessários (como o UUID), então a ferramenta lê essas informações diretamente "
+        "das telas de administração desses módulos. Essas telas só abrem para quem está logado, por isso é "
+        "preciso entrar com o seu email e senha da Mindsight. A senha não é guardada: a sessão fica apenas "
+        "na memória enquanto você usa a ferramenta."
+    )
 
     # Já logado: mostra o status e o botão de sair
     if st.session_state['cookies_sessao']:
-        st.sidebar.success(f"✅ Logado no tenant **{st.session_state['login_tenant']}**.")
-        if st.sidebar.button("Sair", key="btn_logout"):
+        c1, c2 = st.columns([4, 1])
+        c1.success(f"✅ Logado no tenant **{st.session_state['login_tenant']}**.")
+        if c2.button("Sair", key=f"{prefixo}_logout"):
             _limpar_login()
             st.rerun()
         return
 
     # Etapa 2: aguardando o token enviado por email
     if st.session_state['login_contexto']:
-        st.sidebar.info("📧 Enviamos um token para o seu email. Digite-o abaixo.")
-        token = st.sidebar.text_input("Token recebido por email", key="login_token")
-        c1, c2 = st.sidebar.columns(2)
-        if c1.button("Confirmar", key="btn_token"):
+        st.info("📧 Um token foi enviado para o seu email. Digite-o abaixo para concluir o login.")
+        c1, _, _ = st.columns(3)
+        token = c1.text_input("Token recebido por email", key=f"{prefixo}_token")
+        b1, b2, _ = st.columns([1, 1, 4])
+        if b1.button("Confirmar", key=f"{prefixo}_confirmar"):
             if not token.strip():
-                st.sidebar.error("Digite o token.")
+                st.error("Digite o token.")
             else:
                 try:
                     sessao = confirmar_token(st.session_state['login_sessao'], st.session_state['login_contexto'], token)
@@ -222,23 +234,24 @@ def render_login_sidebar():
                     st.session_state['login_contexto'] = None
                     st.rerun()
                 except ErroLogin as e:
-                    st.sidebar.error(str(e))
+                    st.error(str(e))
                 except requests.exceptions.RequestException:
-                    st.sidebar.error("Falha de conexão ao enviar o token. Tente novamente.")
-        if c2.button("Cancelar", key="btn_cancelar_login"):
+                    st.error("Falha de conexão ao enviar o token. Tente novamente.")
+        if b2.button("Cancelar", key=f"{prefixo}_cancelar"):
             _limpar_login()
             st.rerun()
         return
 
     # Etapa 1: tenant, email e senha
-    with st.sidebar.form("form_login"):
-        tenant = st.text_input("Tenant", placeholder="Ex: empresa123")
-        email = st.text_input("Email")
-        senha = st.text_input("Senha", type="password")
+    with st.form(f"{prefixo}_form"):
+        c1, c2, c3 = st.columns(3)
+        tenant = c1.text_input("Tenant", placeholder="Ex: empresa123")
+        email = c2.text_input("Email")
+        senha = c3.text_input("Senha", type="password")
         enviar = st.form_submit_button("Entrar")
     if enviar:
         if not tenant or not email or not senha:
-            st.sidebar.error("Preencha tenant, email e senha.")
+            st.error("Preencha tenant, email e senha.")
             return
         try:
             with st.spinner("Entrando..."):
@@ -251,6 +264,6 @@ def render_login_sidebar():
                 st.session_state['login_contexto'] = contexto
             st.rerun()
         except ErroLogin as e:
-            st.sidebar.error(str(e))
+            st.error(str(e))
         except requests.exceptions.RequestException:
-            st.sidebar.error("Falha de conexão com a Mindsight. Tente novamente.")
+            st.error("Falha de conexão com a Mindsight. Tente novamente.")

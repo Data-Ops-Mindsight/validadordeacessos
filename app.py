@@ -48,7 +48,6 @@ from abas.aba1_validacao import render_aba1
 from abas.aba2_inativacao import render_aba2
 from abas.aba3_participantes import render_aba3
 from abas.aba4_usuarios_modulos import render_aba4
-from login_mindsight import render_login_sidebar
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -117,10 +116,6 @@ st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
 st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
 st.sidebar.markdown("🎯 Participantes da Rodada")
 st.sidebar.markdown("🔍 Usuários x Módulos")
-
-# Login na Mindsight (usado pelas abas que leem as telas de admin do Performance e do Metas)
-st.sidebar.markdown("---")
-render_login_sidebar()
 
 # =============================================================================
 # CORPO PRINCIPAL

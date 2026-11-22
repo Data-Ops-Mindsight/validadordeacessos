@@ -241,7 +241,7 @@ def extrair_django_admin(url_base, cookies, descricao="o admin"):
     Lê a tabela de usuários de uma tela do Django Admin, página por página.
 
     url_base: endereço da listagem (ex.: .../staff/accounts/user/).
-    cookies:  cookies da sessão obtidos no login da barra lateral.
+    cookies:  cookies da sessão obtidos no Login Mindsight.
     Retorna um DataFrame com username, first_name, last_name, email, is_active e uuid.
 
     A paginação do Django Admin usa o parâmetro 'p'. Dependendo da versão a
@@ -262,7 +262,7 @@ def extrair_django_admin(url_base, cookies, descricao="o admin"):
             raise ErroAPI(f"Não foi possível conectar à tela de admin ao buscar {descricao}.")
         if "login" in resposta.url:
             raise ErroAPI(f"A sessão expirou ou seu usuário não tem acesso ao admin ao buscar {descricao}. "
-                          "Faça login novamente na barra lateral.")
+                          "Faça o Login Mindsight novamente.")
 
         soup = BeautifulSoup(resposta.text, 'html.parser')
         tabela = soup.select_one("#result_list tbody")

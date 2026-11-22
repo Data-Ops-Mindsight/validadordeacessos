@@ -3,7 +3,7 @@ Aba 4 - Validação de USUÁRIOS entre os módulos.
 
 Cruza os usuários do Auth (CSV enviado) com os usuários de cada módulo:
   - Controle e People Hub (Full): lidos pela API, com token;
-  - Performance e Metas: lidos das telas de admin, usando o login da barra lateral.
+  - Performance e Metas: lidos das telas de admin, usando o Login Mindsight feito nesta aba.
 
 Validações geradas (cada uma com um Excel para baixar):
   1. Presença: em quais módulos cada usuário do Auth existe (pelo username);
@@ -19,6 +19,7 @@ import time
 
 # Como o arquivo é executado a partir do app.py (na raiz), importamos diretamente
 from functions import *
+from login_mindsight import render_login
 
 MIME_EXCEL = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MODULOS = ['Controle', 'Full', 'Performance', 'Metas']
@@ -48,8 +49,8 @@ def render_aba4():
         "💡 **O que esta aba faz?** Compara os usuários do **Auth** (base enviada) com os usuários do "
         "**Controle**, **People Hub (Full)**, **Performance** e **Metas**. Todos os usuários do Auth são "
         "considerados, **inclusive os inativos**.\n\n"
-        "🔐 O Performance e o Metas são lidos das telas de admin, por isso é preciso estar **logado na "
-        "barra lateral**.\n\n"
+        "🔐 O Performance e o Metas são lidos das telas de admin, por isso é preciso fazer o "
+        "**Login Mindsight** logo abaixo.\n\n"
         "🚫 **Usuários da Mindsight são desconsiderados** nesta validação.\n\n"
         "📄 **Validações geradas:**\n"
         "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando;\n"
@@ -60,7 +61,14 @@ def render_aba4():
     )
 
     # -------------------------------------------------------------------------
-    # SEÇÃO 1: CREDENCIAIS
+    # SEÇÃO 1: LOGIN MINDSIGHT (para ler as telas de admin do Performance e do Metas)
+    # -------------------------------------------------------------------------
+    render_login(prefixo="t4_login")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # SEÇÃO 2: CREDENCIAIS
     # -------------------------------------------------------------------------
     st.markdown("### 🔑 Credenciais de Acesso")
     c1, c2, c3 = st.columns(3)
@@ -71,7 +79,7 @@ def render_aba4():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # SEÇÃO 2: BASE DO AUTH E PROCESSAMENTO
+    # SEÇÃO 3: BASE DO AUTH E PROCESSAMENTO
     # -------------------------------------------------------------------------
     st.markdown("### 📁 Base de Usuários (Auth)")
     arquivo_auth_t4 = st.file_uploader("Faça o upload da base exportada do Auth (.csv)", type=['csv'], key="arquivo_auth_t4")
@@ -80,7 +88,7 @@ def render_aba4():
         if not tenant_t4 or not token_controle_t4 or not token_full_t4 or not arquivo_auth_t4:
             st.error("Preencha o Tenant, os tokens do Controle e do Full e faça o upload da base.")
         elif not st.session_state.get('cookies_sessao'):
-            st.error("⚠️ Faça login na barra lateral primeiro (necessário para ler o Performance e o Metas).")
+            st.error("⚠️ Faça o Login Mindsight no topo desta aba primeiro (necessário para ler o Performance e o Metas).")
         else:
             bar = st.progress(0, text="Iniciando...")
             cookies = st.session_state['cookies_sessao']
