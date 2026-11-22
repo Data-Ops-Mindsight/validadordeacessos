@@ -50,6 +50,7 @@ from abas.aba3_participantes import render_aba3
 from abas.aba4_usuarios_modulos import render_aba4
 from abas.aba5_funcionarios_modulos import render_aba5
 from abas.aba6_regras_bps import render_aba6
+from abas.aba7_senhas import render_aba7
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -76,6 +77,7 @@ apply_style()
 # E os da Aba 6:
 #   t6_dados / t6_tenant: dados carregados do People Hub e tenant
 #   t6_processed / t6_csv / t6_novas / t6_existentes / t6_resumo: regras calculadas e relatórios
+#   t7_processed / t7_tenant / t7_cliente / t7_script / t7_fora / t7_resumo: senhas geradas e relatórios
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "", 't1_mod_verificados': [],
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
@@ -86,7 +88,9 @@ chaves_memoria = {
     't5_processed': False, 't5_tenant': "", 't5_final': pd.DataFrame(), 't5_resumo': pd.DataFrame(), 't5_planilhas': {},
     't5_mod_verificados': [],
     't6_dados': None, 't6_tenant': "", 't6_processed': False, 't6_csv': pd.DataFrame(), 't6_novas': pd.DataFrame(),
-    't6_existentes': pd.DataFrame(), 't6_resumo': pd.DataFrame()
+    't6_existentes': pd.DataFrame(), 't6_resumo': pd.DataFrame(),
+    't7_processed': False, 't7_tenant': "", 't7_cliente': pd.DataFrame(), 't7_script': pd.DataFrame(),
+    't7_fora': pd.DataFrame(), 't7_resumo': pd.DataFrame()
 }
 
 for chave, valor in chaves_memoria.items():
@@ -119,11 +123,6 @@ else:
 # =============================================================================
 # PÁGINAS EM CONSTRUÇÃO (só para visualizar o layout)
 # =============================================================================
-def render_senhas():
-    st.header("Criação de Senhas")
-    st.info("🚧 Em construção.")
-
-
 def render_salarios():
     st.header("Validação de Salários")
     st.info("🚧 Em construção.")
@@ -140,7 +139,7 @@ paginas = {
         st.Page(render_aba1, title="Validação (Ativos)", icon="✅", url_path="validacao-ativos", default=True),
         st.Page(render_aba2, title="Inativar (Desligados)", icon="❌", url_path="inativar-desligados"),
         st.Page(render_aba3, title="Participantes (Rodada)", icon="🎯", url_path="participantes-rodada"),
-        st.Page(render_senhas, title="Criação de Senhas", icon="🔐", url_path="criacao-senhas"),
+        st.Page(render_aba7, title="Criação de Senhas", icon="🔐", url_path="criacao-senhas"),
     ],
     "Conferência entre módulos": [
         st.Page(render_aba4, title="Usuários x Módulos", icon="🔍", url_path="usuarios-modulos"),
