@@ -5,7 +5,7 @@ Responsabilidades deste arquivo:
   - configurar a página;
   - baixar o pacote privado 'mindsight-api-requests' (usado pelas funções de API);
   - inicializar a memória da sessão (session_state);
-  - montar a barra lateral com a logo e as abas da ferramenta.
+  - montar a barra lateral com a logo e o menu de ferramentas (agrupado por assunto).
 
 Para rodar localmente: streamlit run app.py
 (é necessário ter GITHUB_TOKEN em .streamlit/secrets.toml)
@@ -94,87 +94,58 @@ for chave, valor in chaves_memoria.items():
         st.session_state[chave] = valor
 
 # =============================================================================
-# BARRA LATERAL COM A LOGO 
+# LOGO (canto superior da barra lateral)
 # =============================================================================
-# Tenta usar a logo em SVG; se não existir, usa o PNG; se nada existir, mostra o nome em texto.
-logo_svg = "mindsight_logo.svg"
-logo_png = "mindsight_logo.png"
-
-if os.path.exists(logo_svg):
+# Usa a logo em SVG; se não existir, o PNG; se nada existir, mostra o nome em texto.
+logo = next((f for f in ["mindsight_logo.svg", "mindsight_logo.png"] if os.path.exists(f)), None)
+if logo:
     try:
-        with open(logo_svg, "r", encoding="utf-8") as f:
-            svg_content = f.read()
-        st.sidebar.markdown(
-            f'<div style="width:100%; text-align:center; padding-bottom: 20px;">{svg_content}</div>', 
-            unsafe_allow_html=True
-        )
-    except Exception:
-        st.sidebar.markdown("### **mindsight**")
-elif os.path.exists(logo_png):
-    try:
-        with open(logo_png, "rb") as f:
-            data = base64.b64encode(f.read()).decode("utf-8")
-        st.sidebar.markdown(
-            f'<img src="data:image/png;base64,{data}" style="width:100%; padding-bottom: 20px;">', 
-            unsafe_allow_html=True
-        )
+        st.logo(logo, size="large")
     except Exception:
         st.sidebar.markdown("### **mindsight**")
 else:
     st.sidebar.markdown("### **mindsight**")
 
-st.sidebar.markdown("---")
-st.sidebar.header("Módulos Disponíveis")
-st.sidebar.markdown("✅ Validação de Acessos (Ativos)")
-st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
-st.sidebar.markdown("🎯 Participantes da Rodada")
-st.sidebar.markdown("🔍 Usuários x Módulos")
-st.sidebar.markdown("👥 Funcionários x Módulos")
-st.sidebar.markdown("🛠️ Regras de Acessos (BPs)")
-st.sidebar.markdown("🔐 Criação de Senhas")
-st.sidebar.markdown("💰 Validação de Salários")
+
+# =============================================================================
+# PÁGINAS EM CONSTRUÇÃO (só para visualizar o layout)
+# =============================================================================
+def render_senhas():
+    st.header("Criação de Senhas")
+    st.info("🚧 Em construção.")
+
+
+def render_salarios():
+    st.header("Validação de Salários")
+    st.info("🚧 Em construção.")
+
+
+# =============================================================================
+# MENU DE NAVEGAÇÃO (barra lateral, agrupado por assunto)
+# =============================================================================
+# Cada ferramenta é uma página com endereço próprio (ex.: .../regras-bps) e só a
+# página aberta é executada. Para criar uma ferramenta nova, basta acrescentar um
+# st.Page no grupo certo.
+paginas = {
+    "Acessos no Auth": [
+        st.Page(render_aba1, title="Validação (Ativos)", icon="✅", url_path="validacao-ativos", default=True),
+        st.Page(render_aba2, title="Inativar (Desligados)", icon="❌", url_path="inativar-desligados"),
+        st.Page(render_aba3, title="Participantes (Rodada)", icon="🎯", url_path="participantes-rodada"),
+        st.Page(render_senhas, title="Criação de Senhas", icon="🔐", url_path="criacao-senhas"),
+    ],
+    "Conferência entre módulos": [
+        st.Page(render_aba4, title="Usuários x Módulos", icon="🔍", url_path="usuarios-modulos"),
+        st.Page(render_aba5, title="Funcionários x Módulos", icon="👥", url_path="funcionarios-modulos"),
+    ],
+    "People Hub / Organograma": [
+        st.Page(render_aba6, title="Regras de Acessos (BPs)", icon="🛠️", url_path="regras-bps"),
+        st.Page(render_salarios, title="Validação de Salários", icon="💰", url_path="validacao-salarios"),
+    ],
+}
+pagina = st.navigation(paginas, position="sidebar")
 
 # =============================================================================
 # CORPO PRINCIPAL
 # =============================================================================
 st.title("Canivete Suíço Mindsight")
-
-# Criação das abas visuais
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-    "✅ Validação (Ativos)", 
-    "❌ Inativar (Desligados)", 
-    "🎯 Participantes (Rodada)", 
-    "🔍 Usuários x Módulos",
-    "👥 Funcionários x Módulos",
-    "🛠️ Criador de Regras de Acessos (BPs)",
-    "🔐 Criação de Senhas",
-    "💰 Validação de Salários",
-])
-
-# Renderização do conteúdo de cada aba de forma modular
-with tab1:
-    render_aba1()
-
-with tab2:
-    render_aba2()
-
-with tab3:
-    render_aba3()
-
-with tab4:
-    render_aba4()
-
-with tab5:
-    render_aba5()
-
-with tab6:
-    render_aba6()
-
-# Abas ainda em construção (só para visualizar o layout)
-with tab7:
-    st.header("Criação de Senhas")
-    st.info("🚧 Em construção.")
-
-with tab8:
-    st.header("Validação de Salários")
-    st.info("🚧 Em construção.")
+pagina.run()
