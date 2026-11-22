@@ -2,15 +2,15 @@
 Aba 6 - Criador de Regras de Acessos (BPs) no People Hub.
 
 Contexto: o acesso admin do Hub mostra todos os funcionários da empresa. Quando o
-cliente não quer isso, cada BP (Business Partner) recebe regras de acesso que liberam
+cliente não quer isso, cado BP (Business Partner) recebe regras de acesso que liberam
 só alguns funcionários, por Empresa ou por Área.
 
 Fluxo da aba:
   1. Carrega do People Hub (API): funcionários ativos, empresas, cargos, hierarquia
      de áreas e regras de acesso já cadastradas;
-  2. Para cada BP: escolhe a pessoa, o modo (Empresa ou Área), o que ela visualiza
+  2. Para cado BP: escolhe a pessoa, o modo (Empresa ou Área), o que ele visualiza
      e as exclusões (áreas, empresas, cargos, senioridades);
-  3. Calcula quem cada BP deve visualizar e gera:
+  3. Calcula quem cado BP deve visualizar e gera:
        - CSV de upload só com as regras NOVAS;
        - relatório das regras novas;
        - relatório das regras que já existem, dizendo se cada uma ainda bate.
@@ -18,9 +18,9 @@ Fluxo da aba:
 Regras geradas por funcionário visível:
   - sempre 'individual';
   - 'tree' só para gestores cujos liderados (todos os níveis abaixo) também podem
-    ser vistos pela BP. O tree libera a equipe inteira do gestor, então não pode
-    ser usado se alguém da equipe estiver fora da regra da BP.
-O owner da regra é o usuário (user) da própria BP, e a BP não entra na própria regra.
+    ser vistos pelo BP. O tree libera a equipe inteira do gestor, então não pode
+    ser usado se alguém da equipe estiver fora da regra do BP.
+O owner da regra é o usuário (user) do próprio BP, e o BP não entra na própria regra.
 """
 
 import json
@@ -137,7 +137,7 @@ def carregar_dados_hub(tenant, token):
                 pai[filha] = mae
     base['Área pai'] = base['Área'].map(pai).fillna('')
 
-    # --- Regras já cadastradas: user da BP + person do funcionário ---
+    # --- Regras já cadastradas: user do BP + person do funcionário ---
     if regras is None or regras.empty:
         regras = pd.DataFrame(columns=['id', 'user', 'owner', 'type', 'params'])
     regras = regras.copy()
@@ -174,15 +174,15 @@ def _com_areas_abaixo(areas, filhas):
 
 def _avaliar_bp(cfg, base, filhas):
     """
-    Para uma BP, devolve uma Series person_id -> motivo. Motivo vazio = a BP pode ver.
+    Para um BP, devolve uma Series person_id -> motivo. Motivo vazio = o BP pode ver.
     """
     if cfg['modo'] == MODO_EMPRESA:
         dentro = base['Empresa'].isin(cfg['incluir'])
-        motivo_fora = 'Fora das empresas da BP'
+        motivo_fora = 'Fora das empresas do BP'
     else:
         areas = _com_areas_abaixo(cfg['incluir'], filhas) if cfg['abaixo'] else set(cfg['incluir'])
         dentro = base['Área'].isin(areas)
-        motivo_fora = 'Fora das áreas da BP'
+        motivo_fora = 'Fora das áreas do BP'
 
     motivo = pd.Series('', index=base.index)
     motivo[~dentro] = motivo_fora
@@ -193,7 +193,7 @@ def _avaliar_bp(cfg, base, filhas):
                                    ('Senioridade', set(cfg['excl_senioridades']), 'Senioridade excluída')]:
         if valores:
             motivo[(motivo == '') & base[coluna].isin(valores)] = texto
-    motivo[base['person_id'] == cfg['person_id']] = 'É a própria BP'
+    motivo[base['person_id'] == cfg['person_id']] = 'É o próprio BP'
     return pd.Series(motivo.values, index=base['person_id'].values)
 
 
@@ -225,17 +225,17 @@ def render_aba6():
         "💡 **O que esta aba faz?** No People Hub, o acesso **admin** mostra todos os funcionários da empresa. "
         "Quando o cliente não quer isso, cada **BP** recebe **regras de acesso** que liberam só alguns "
         "funcionários, **por Empresa** ou **por Área**. Esta aba calcula essas regras em massa.\n\n"
-        "⚙️ **Como funciona para cada BP:**\n"
-        "- **Por Empresa:** a BP vê os funcionários das empresas escolhidas. Dá para excluir áreas, cargos e "
+        "⚙️ **Como funciona para cado BP:**\n"
+        "- **Por Empresa:** o BP vê os funcionários das empresas escolhidas. Dá para excluir áreas, cargos e "
         "senioridades;\n"
-        "- **Por Área:** a BP vê os funcionários das áreas escolhidas e, se marcado, de **todas as áreas abaixo** "
+        "- **Por Área:** o BP vê os funcionários das áreas escolhidas e, se marcado, de **todas as áreas abaixo** "
         "delas. Dá para excluir empresas, cargos e senioridades.\n\n"
-        "📄 **Regras geradas para cada funcionário que a BP pode ver:**\n"
+        "📄 **Regras geradas para cada funcionário que o BP pode ver:**\n"
         "- **individual:** sempre. Libera aquele funcionário;\n"
         "- **tree:** só para **gestores** cuja equipe inteira (todos os níveis abaixo) também pode ser vista "
-        "pela BP. O tree libera a equipe do gestor, então, se alguém da equipe estiver fora da regra "
+        "pelo BP. O tree libera a equipe do gestor, então, se alguém da equipe estiver fora da regra "
         "(ex.: um cargo excluído), o gestor recebe só o individual.\n\n"
-        "O **owner** da regra é o usuário (user) da própria BP, e a BP não entra na própria regra (ela já se vê). "
+        "O **owner** da regra é o usuário (user) do próprio BP, e o BP não entra na própria regra (ele já se vê). "
         "Só são considerados os funcionários **ativos** no People Hub."
     )
 
@@ -265,7 +265,7 @@ def render_aba6():
 
     dados = st.session_state.get('t6_dados')
     if not dados:
-        st.caption("Carregue os dados do cliente para configurar as BPs.")
+        st.caption("Carregue os dados do cliente para configurar os BPs.")
         return
 
     base, opcoes = dados['base'], dados['opcoes']
@@ -276,36 +276,36 @@ def render_aba6():
     # -------------------------------------------------------------------------
     # SEÇÃO 2: CONFIGURAÇÃO DAS BPs
     # -------------------------------------------------------------------------
-    st.markdown("### 👥 Configuração das BPs")
+    st.markdown("### 👥 Configuração dos BPs")
     # Opções de BP: "Nome (email)" -> person_id
     rotulos = {f"{n} ({e})" if _texto(e) else n: p
                for n, e, p in sorted(zip(base['Nome'], base['Email'], base['person_id']))}
-    qtd = st.number_input("Quantas BPs terão regras de acesso?", min_value=1, max_value=30, value=1, step=1, key="qtd_bps_t6")
+    qtd = st.number_input("Quantos BPs terão regras de acesso?", min_value=1, max_value=30, value=1, step=1, key="qtd_bps_t6")
 
     configs, erros = [], []
     for i in range(int(qtd)):
         with st.container(border=True):
-            st.markdown(f"#### {i + 1}ª BP")
+            st.markdown(f"#### {i + 1}º BP")
             bp = st.selectbox("Funcionário (BP)", options=list(rotulos), index=None, key=f"t6_bp_{i}",
                               placeholder="Digite para buscar pelo nome...")
-            modo = st.radio("A BP vai visualizar os funcionários:", [MODO_EMPRESA, MODO_AREA],
+            modo = st.radio("O BP vai visualizar os funcionários:", [MODO_EMPRESA, MODO_AREA],
                             horizontal=True, key=f"t6_modo_{i}")
             cfg = {'modo': modo, 'abaixo': False, 'excl_areas': [], 'excl_areas_abaixo': False,
                    'excl_empresas': [], 'excl_cargos': [], 'excl_senioridades': []}
 
             if modo == MODO_EMPRESA:
-                cfg['incluir'] = st.multiselect("Empresas que a BP visualiza", opcoes['empresas'], key=f"t6_emp_{i}")
-                st.markdown("**Exclusões** (funcionários dessas empresas que a BP **não** pode ver):")
+                cfg['incluir'] = st.multiselect("Empresas que o BP visualiza", opcoes['empresas'], key=f"t6_emp_{i}")
+                st.markdown("**Exclusões** (funcionários dessas empresas que o BP **não** pode ver):")
                 e1, e2, e3 = st.columns(3)
                 if e1.checkbox("Excluir áreas", key=f"t6_xa_{i}"):
                     cfg['excl_areas'] = e1.multiselect("Áreas excluídas", opcoes['areas'], key=f"t6_xal_{i}")
                     cfg['excl_areas_abaixo'] = e1.checkbox("Excluir também as áreas abaixo", value=True, key=f"t6_xab_{i}")
                 ex_cargo, ex_sen = e2, e3
             else:
-                cfg['incluir'] = st.multiselect("Áreas que a BP visualiza", opcoes['areas'], key=f"t6_area_{i}")
+                cfg['incluir'] = st.multiselect("Áreas que o BP visualiza", opcoes['areas'], key=f"t6_area_{i}")
                 cfg['abaixo'] = st.checkbox("Incluir as áreas abaixo das áreas escolhidas (todos os níveis)",
                                             value=True, key=f"t6_abaixo_{i}")
-                st.markdown("**Exclusões** (funcionários dessas áreas que a BP **não** pode ver):")
+                st.markdown("**Exclusões** (funcionários dessas áreas que o BP **não** pode ver):")
                 e1, e2, e3 = st.columns(3)
                 if e1.checkbox("Excluir empresas", key=f"t6_xe_{i}"):
                     cfg['excl_empresas'] = e1.multiselect("Empresas excluídas", opcoes['empresas'], key=f"t6_xel_{i}")
@@ -316,13 +316,13 @@ def render_aba6():
                 cfg['excl_senioridades'] = ex_sen.multiselect("Senioridades excluídas", opcoes['senioridades'], key=f"t6_xsl_{i}")
 
             if not bp:
-                erros.append(f"Escolha o funcionário da {i + 1}ª BP.")
+                erros.append(f"Escolha o funcionário do {i + 1}º BP.")
             elif not cfg['incluir']:
-                erros.append(f"Escolha ao menos uma {'empresa' if modo == MODO_EMPRESA else 'área'} para a {i + 1}ª BP.")
+                erros.append(f"Escolha ao menos uma {'empresa' if modo == MODO_EMPRESA else 'área'} para o {i + 1}º BP.")
             else:
                 linha_bp = base[base['person_id'] == rotulos[bp]].iloc[0]
                 if not linha_bp['user_id']:
-                    erros.append(f"A BP {linha_bp['Nome']} não tem usuário no People Hub, então não pode receber regras.")
+                    erros.append(f"O BP {linha_bp['Nome']} não tem usuário no People Hub, então não pode receber regras.")
                 cfg.update({'person_id': linha_bp['person_id'], 'user_id': linha_bp['user_id'], 'nome': linha_bp['Nome']})
                 configs.append(cfg)
 
@@ -344,15 +344,15 @@ def render_aba6():
                 motivos = _avaliar_bp(cfg, base, dados['filhas'])
                 visiveis = set(motivos[motivos == ''].index)
                 existentes_bp = regras[regras['_user'] == cfg['user_id']]
-                # Regras já cadastradas para a BP: (person, tipo)
+                # Regras já cadastradas para o BP: (person, tipo)
                 ja_tem = set(zip(existentes_bp['_person'], existentes_bp['_type']))
 
                 def pode_tree(p):
-                    """tree só para gestor cuja equipe inteira pode ser vista (a própria BP pode estar na equipe)."""
+                    """tree só para gestor cuja equipe inteira pode ser vista (o próprio BP pode estar na equipe)."""
                     equipe = liderados.get(p, set())
                     return bool(equipe) and all(m in visiveis or m == cfg['person_id'] for m in equipe)
 
-                # Regras que a BP deveria ter e ainda não tem
+                # Regras que o BP deveria ter e ainda não tem
                 qtd_tree = qtd_completos = 0
                 for p in visiveis:
                     tipos = ['individual'] + (['tree'] if pode_tree(p) else [])
@@ -367,14 +367,14 @@ def render_aba6():
                                   'user': cfg['user_id'], 'owner': cfg['user_id'], 'person_id': p,
                                   '_tipos': faltando})
 
-                # Regras que já existem para a BP (uma linha por regra): ainda batem com a configuração?
+                # Regras que já existem para o BP (uma linha por regra): ainda batem com a configuração?
                 qtd_nao_batem = 0
                 for p, tipo in sorted(ja_tem):
                     if p in info.index:
                         dados_func = {c: info.at[p, c] for c in cols_info}
                         motivo = motivos.get(p, '')
                         if not motivo and tipo == 'tree' and not pode_tree(p):
-                            motivo = ('Tree não deveria existir: há pessoas na equipe do gestor que a BP não pode ver'
+                            motivo = ('Tree não deveria existir: há pessoas na equipe do gestor que o BP não pode ver'
                                       if liderados.get(p) else 'Tree em quem não é mais gestor')
                     else:
                         dados_func = {'Nome': f'(person {p})'}
@@ -421,7 +421,7 @@ def render_aba6():
         # Regras novas
         st.subheader("Regras novas")
         if df_csv.empty:
-            st.info("Nenhuma regra nova: todos os funcionários que as BPs devem ver já têm regra cadastrada.")
+            st.info("Nenhuma regra nova: todos os funcionários que os BPs devem ver já têm regra cadastrada.")
         else:
             st.markdown(f"**{len(df_novas)}** funcionários com regras faltando, que geram **{len(df_csv)}** regras "
                         "novas (individual e, para os gestores liberados, tree). Quem já tem a regra não entra de novo.")
@@ -439,10 +439,10 @@ def render_aba6():
         # Regras existentes
         st.subheader("Regras que já existem")
         if df_exist.empty:
-            st.info("As BPs configuradas ainda não têm nenhuma regra cadastrada.")
+            st.info("Os BPs configurados ainda não têm nenhuma regra cadastrada.")
         else:
             nao_batem = int((df_exist['Ainda bate?'] == 'Não').sum())
-            st.markdown(f"**{len(df_exist)}** regras já cadastradas para as BPs, das quais **{nao_batem}** "
+            st.markdown(f"**{len(df_exist)}** regras já cadastradas para os BPs, das quais **{nao_batem}** "
                         "não batem mais com a configuração (coluna *Motivo*).")
             with st.expander("👁️ Ver regras existentes"):
                 st.dataframe(df_exist, use_container_width=True, hide_index=True)
