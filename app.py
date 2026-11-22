@@ -1,5 +1,5 @@
 """
-Canivete Suíço de Acessos (Mindsight) - ponto de entrada do app Streamlit.
+Canivete Suíço Mindsight - ponto de entrada do app Streamlit.
 
 Responsabilidades deste arquivo:
   - configurar a página;
@@ -19,7 +19,7 @@ import sys
 import subprocess
 
 # Configuração da página (DEVE ser a primeira linha)
-st.set_page_config(page_title="Canivete Suíço | Mindsight", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Canivete Suíço Mindsight", layout="wide", initial_sidebar_state="expanded")
 
 # =============================================================================
 # INJEÇÃO SEGURA DO PACOTE PRIVADO (Sem expor no GitHub e sem usar pip)
@@ -131,20 +131,24 @@ st.sidebar.markdown("🎯 Participantes da Rodada")
 st.sidebar.markdown("🔍 Usuários x Módulos")
 st.sidebar.markdown("👥 Funcionários x Módulos")
 st.sidebar.markdown("🛠️ Regras de Acessos (BPs)")
+st.sidebar.markdown("🔐 Criação de Senhas")
+st.sidebar.markdown("💰 Validação de Salários")
 
 # =============================================================================
 # CORPO PRINCIPAL
 # =============================================================================
-st.title("Canivete Suíço de Acessos")
+st.title("Canivete Suíço Mindsight")
 
 # Criação das abas visuais
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
     "🎯 Participantes (Rodada)", 
     "🔍 Usuários x Módulos",
     "👥 Funcionários x Módulos",
-    "🛠️ Criador de Regras de Acessos (BPs)"
+    "🛠️ Criador de Regras de Acessos (BPs)",
+    "🔐 Criação de Senhas",
+    "💰 Validação de Salários",
 ])
 
 # Renderização do conteúdo de cada aba de forma modular
@@ -165,3 +169,12 @@ with tab5:
 
 with tab6:
     render_aba6()
+
+# Abas ainda em construção (só para visualizar o layout)
+with tab7:
+    st.header("Criação de Senhas")
+    st.info("🚧 Em construção.")
+
+with tab8:
+    st.header("Validação de Salários")
+    st.info("🚧 Em construção.")
