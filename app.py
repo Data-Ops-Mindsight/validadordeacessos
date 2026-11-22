@@ -147,6 +147,41 @@ paginas = {
 }
 pagina = st.navigation(paginas, position="sidebar")
 
+
+# =============================================================================
+# AJUDA: COMO PEGAR OS TOKENS (botão logo abaixo da logo)
+# =============================================================================
+@st.dialog("🔑 Como pegar os tokens", width="large")
+def ajuda_tokens():
+    st.markdown(
+        "Cada módulo (Auth, Controle, People Hub/Full, Performance, Metas...) tem o seu próprio "
+        "token, e ele é **enviado para o seu email**.\n\n"
+        "**1. Acesse o Django do módulo** do qual você precisa do token, já logado, com o tenant do cliente.\n\n"
+        "**2. Procure por `Mindsight token extension libs`** (dá para digitar no filtro do menu "
+        "lateral do Django) e abra essa tela.\n\n"
+        "**3. Marque a linha do seu usuário** e confira a coluna **Expires at**:\n"
+        "- ✅ **Token ainda válido** (data de expiração no futuro): em **Ação**, escolha "
+        "**Reenviar E-mail da token** e clique em **Ir**.\n"
+        "- ⌛ **Token vencido** (data de expiração no passado): em **Ação**, escolha "
+        "**Recreate token** e clique em **Ir**.\n\n"
+        "**4. Abra o seu email:** o token chega por lá. É só copiar e colar no campo de token da ferramenta.\n\n"
+        "💡 A coluna **Last chars** mostra os últimos caracteres do token atual. Use para conferir "
+        "se o token que você tem no email é o mais recente."
+    )
+
+
+# Coloca o conteúdo da barra lateral (o botão) acima do menu, logo abaixo da logo
+st.markdown("""
+    <style>
+    [data-testid="stSidebarContent"] { display: flex; flex-direction: column; }
+    [data-testid="stSidebarContent"] > [data-testid="stSidebarHeader"] { order: 0; }
+    [data-testid="stSidebarContent"] > [data-testid="stSidebarUserContent"] { order: 1; padding-top: 0; padding-bottom: 0.5rem; }
+    [data-testid="stSidebarContent"] > [data-testid="stSidebarNav"] { order: 2; }
+    </style>
+""", unsafe_allow_html=True)
+if st.sidebar.button("🔑 Como pegar os tokens", use_container_width=True, key="btn_ajuda_tokens"):
+    ajuda_tokens()
+
 # =============================================================================
 # CORPO PRINCIPAL
 # =============================================================================
