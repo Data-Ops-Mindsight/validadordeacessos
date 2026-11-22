@@ -83,7 +83,8 @@ def render_aba4():
         "**Exportar usuários** (veja o passo a passo em *Como gerar os CSVs do Performance e do Metas*).\n\n"
         "🚫 **Usuários da Mindsight são desconsiderados** nesta validação.\n\n"
         "📄 **Validações geradas:**\n"
-        "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando;\n"
+        "1. **Presença nos módulos:** em quais módulos cada usuário do Auth existe e em quais está faltando, e "
+        "quais usuários existem em algum módulo mas **não existem no Auth**;\n"
         "2. **Possíveis duplicados:** nomes completos com mais de um username ou email (pode ser homônimo, "
         "mas também um funcionário cadastrado duas vezes);\n"
         "3. **Divergência de username:** mesmo email com username diferente entre o Auth e o módulo;\n"
@@ -238,6 +239,28 @@ def render_aba4():
                 df_val1['Modulos_Ausentes'] = df_val1.apply(
                     lambda r: ", ".join([m for m in MODULOS if r[m] == 'Não']) or "Nenhum", axis=1)
 
+                # --- Validação 1 (parte 2): usuários que existem em algum módulo, mas não no Auth ---
+                usernames_auth = set(df_auth['username'])
+                registros_fora = []
+                for nome, base in bases.items():
+                    if base.empty or 'username' not in base.columns:
+                        continue
+                    # reindex garante as colunas mesmo se o módulo não tiver alguma delas
+                    fora = base.reindex(columns=['username', 'email', 'first_name', 'last_name'])
+                    fora = fora.loc[~fora['username'].isin(usernames_auth) & fora['username'].apply(_valido)].copy()
+                    fora['Modulo'] = nome
+                    registros_fora.append(fora)
+                df_fora_auth = pd.DataFrame()
+                if registros_fora:
+                    df_f = pd.concat(registros_fora, ignore_index=True)
+                    # Um registro por username: dados do primeiro módulo em que aparece + lista de módulos
+                    df_fora_auth = df_f.groupby('username', as_index=False).agg(
+                        email=('email', 'first'),
+                        first_name=('first_name', 'first'),
+                        last_name=('last_name', 'first'),
+                        Modulos_Onde_Existe=('Modulo', lambda x: ", ".join(sorted(set(x)))),
+                    )
+
                 # --- Validação 2: possíveis duplicados (mesmo nome, vários usernames/emails) ---
                 todos = []
                 for nome, base in {'Auth': df_auth, **bases}.items():
@@ -295,6 +318,7 @@ def render_aba4():
                 st.session_state.t4_tenant = tenant_t4
                 st.session_state.t4_val1_ok = df_val1[df_val1['Modulos_Ausentes'] == 'Nenhum'].copy()
                 st.session_state.t4_val1_faltantes = df_val1[df_val1['Modulos_Ausentes'] != 'Nenhum'].copy()
+                st.session_state.t4_val1_fora_auth = df_fora_auth
                 st.session_state.t4_val2 = df_val2
                 st.session_state.t4_val3 = df_val3
                 st.session_state.t4_val4 = df_val4
@@ -332,9 +356,20 @@ def render_aba4():
         if not falt.empty:
             with st.expander("👁️ Ver usuários faltando em módulos"):
                 st.dataframe(falt, use_container_width=True)
-        if not ok.empty or not falt.empty:
-            st.download_button("📥 Baixar Presença (Excel, 2 planilhas)",
-                               data=gerar_excel_multi_abas({'Presentes em Todos': ok, 'Faltando em Módulos': falt}),
+
+        # Usuários que existem em algum módulo, mas não no Auth
+        fora = st.session_state.get('t4_val1_fora_auth', pd.DataFrame())
+        if fora.empty:
+            st.markdown("Todos os usuários dos módulos existem no Auth.")
+        else:
+            st.markdown(f"**{len(fora)}** usuários existem em algum módulo, mas **não existem no Auth**.")
+            with st.expander("👁️ Ver usuários que não existem no Auth"):
+                st.dataframe(fora, use_container_width=True)
+
+        if not ok.empty or not falt.empty or not fora.empty:
+            st.download_button("📥 Baixar Presença (Excel, 3 planilhas)",
+                               data=gerar_excel_multi_abas({'Presentes em Todos': ok, 'Faltando em Módulos': falt,
+                                                            'Não Existem no Auth': fora}),
                                file_name=f"{tenant}_validacao_presenca.xlsx", mime=MIME_EXCEL, key="down_v1")
 
         # 2ª validação

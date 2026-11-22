@@ -65,14 +65,14 @@ apply_style()
 #   t3_df_fix / t3_df_not_found / t3_df_desligados: correção do Auth, não encontrados e desligados
 #   t3_len_total / t3_qtd_mindsight / t3_tenant / t3_nome_rodada: totais e dados da rodada
 # E os resultados da Aba 4:
-#   t4_val1_ok / t4_val1_faltantes / t4_val2 / t4_val3 / t4_val4: resultado de cada validação
+#   t4_val1_ok / t4_val1_faltantes / t4_val1_fora_auth / t4_val2 / t4_val3 / t4_val4: resultado de cada validação
 #   t4_tem_uuid / t4_bases_vazias / t4_tenant: informações para a tela de resultados
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "",
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
     't3_processed': False, 't3_df_fix': pd.DataFrame(), 't3_df_not_found': pd.DataFrame(),
     't3_df_desligados': pd.DataFrame(), 't3_len_total': 0, 't3_qtd_mindsight': 0, 't3_tenant': "", 't3_nome_rodada': "",
-    't4_processed': False, 't4_tenant': "", 't4_val1_ok': pd.DataFrame(), 't4_val1_faltantes': pd.DataFrame(),
+    't4_processed': False, 't4_tenant': "", 't4_val1_ok': pd.DataFrame(), 't4_val1_faltantes': pd.DataFrame(), 't4_val1_fora_auth': pd.DataFrame(),
     't4_val2': pd.DataFrame(), 't4_val3': pd.DataFrame(), 't4_val4': pd.DataFrame(), 't4_tem_uuid': False, 't4_bases_vazias': []
 }
 
