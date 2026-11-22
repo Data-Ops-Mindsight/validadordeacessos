@@ -8,8 +8,10 @@ essas páginas é o servidor, então ele mesmo precisa fazer o login.
 Como funciona (mesmo fluxo da tela de login):
   1. Etapa 1: o usuário informa tenant, email e senha. O app abre a página de
      login do auth.mindsight.com.br, preenche o formulário e envia.
-  2. Etapa 2: a Mindsight envia um token para o email. O usuário digita o token
-     no app, que envia o segundo formulário.
+  2. Etapa 2: a Mindsight envia um código para o email. Se a conta usa chave
+     de segurança (FIDO2), o app pula essa tela e abre a do código por email
+     (accounts/login_otp/), como acontece no navegador ao cancelar a chave.
+     O usuário digita o código no app, que envia o segundo formulário.
   3. Com o login concluído, a sessão (requests.Session, com os cookies de cada
      domínio da Mindsight) fica guardada APENAS na memória da sessão do
      Streamlit (st.session_state['cookies_sessao']). Ela é reaproveitada nas
@@ -28,6 +30,8 @@ import streamlit as st
 from bs4 import BeautifulSoup
 
 URL_LOGIN = "https://auth.mindsight.com.br/{tenant}/"
+# Tela do código de verificação enviado por email (alternativa à chave de segurança)
+URL_LOGIN_OTP = "https://auth.mindsight.com.br/{tenant}/accounts/login_otp/"
 TIMEOUT = 30
 # Trechos de URL que indicam que ainda estamos em alguma etapa do login
 TRECHOS_LOGIN = ('login', 'mfa', 'otp', 'token', 'verif', '2fa')
@@ -191,6 +195,13 @@ def iniciar_login(tenant, email, senha):
         raise ErroLogin("Email ou senha incorretos." + (f" ({detalhe})" if detalhe else ""))
 
     form_token, campo_token = _form_de_token(r2.text, r2.url)
+    if form_token is None:
+        # Usuários com chave de segurança (FIDO2) caem primeiro na tela "Security Key".
+        # No navegador, ao cancelar a chave, a Mindsight vai para a tela do código
+        # enviado por email (accounts/login_otp/). O app vai direto para essa tela.
+        url_otp = URL_LOGIN_OTP.format(tenant=tenant.strip())
+        r2 = sessao.get(url_otp, headers={'Referer': r2.url}, timeout=TIMEOUT)
+        form_token, campo_token = _form_de_token(r2.text, r2.url)
     if form_token is None:
         # O login da Mindsight SEMPRE pede o token enviado por email. Se a tela do
         # token não foi reconhecida, não dá o login como feito: mostra um resumo
