@@ -191,7 +191,7 @@ def render_aba5():
         "- **Gestor atual:** o mesmo gestor do Controle (Hub e Metas);\n"
         "- **Cargo e área atuais:** os mesmos do Controle (Hub).\n\n"
         "Cada módulo é opcional: se o arquivo de um módulo não for enviado, ele não é verificado. "
-        "O resultado sai em um Excel com um resumo, a base completa e uma planilha para cada tipo de problema."
+        "O resultado sai em um Excel com o resumo, uma planilha enxuta para cada tipo de problema e a base completa."
     )
 
     # -------------------------------------------------------------------------
@@ -358,37 +358,73 @@ def render_aba5():
 
                 base = base.drop(columns=['_cod']).sort_values(['Status', 'Nome']).reset_index(drop=True)
 
-                # --- Resumo e planilhas por tipo de problema ---
-                col_match = [c for c in base.columns if c.startswith('Match_')]
+                # --- Resumo: uma linha por verificação e módulo ---
+                nomes_campos = {'Username': 'Username', 'UUID': 'UUID', 'Gestor': 'Gestor atual',
+                                'Cargo': 'Cargo atual', 'Area': 'Área atual'}
                 resumo = []
-                for c in col_match:
-                    _, campo, nome_mod = c.split('_', 2)
-                    valores = base[c]
-                    resumo.append({
-                        'Verificação': f"{campo} - {nome_mod}",
-                        'OK': int((valores == OK).sum()),
-                        'Divergente': int((valores == DIVERGENTE).sum()),
-                        'Vazio no módulo': int(valores.isin([SEM_USUARIO, SEM_UUID]).sum()),
-                        'Não existe no módulo': int((valores == NAO_EXISTE).sum()),
-                    })
+                for nome_mod in modulos:
+                    existe = base[f'Existe_{nome_mod}'] == 'Sim'
+                    resumo.append({'Verificação': f"Existe no {nome_mod}", 'OK': int(existe.sum()),
+                                   'Divergente': '-', 'Vazio no módulo': '-',
+                                   'Não existe no módulo': int((~existe).sum())})
+                    for campo, rotulo in nomes_campos.items():
+                        c = f'Match_{campo}_{nome_mod}'
+                        if c not in base.columns:
+                            continue
+                        valores = base[c]
+                        resumo.append({
+                            'Verificação': f"{rotulo} no {nome_mod}",
+                            'OK': int((valores == OK).sum()),
+                            'Divergente': int((valores == DIVERGENTE).sum()),
+                            'Vazio no módulo': int(valores.isin([SEM_USUARIO, SEM_UUID]).sum()),
+                            'Não existe no módulo': int((valores == NAO_EXISTE).sum()),
+                        })
                 df_resumo = pd.DataFrame(resumo)
 
-                def com_problema(prefixos):
-                    cols = [c for c in col_match if any(c.startswith(p) for p in prefixos)]
-                    if not cols:
-                        return pd.DataFrame()
-                    return base[base[cols].isin([DIVERGENTE, SEM_USUARIO, SEM_UUID]).any(axis=1)]
+                # --- Tabelas enxutas: só as colunas que importam em cada divergência ---
+                id_cols = ['employee_code', 'Nome', 'Status']
 
-                cols_existe = [c for c in base.columns if c.startswith('Existe_')]
+                def divergencias(campo, rotulo):
+                    """Uma linha por funcionário e módulo com problema: valor no Controle x valor no módulo."""
+                    partes = []
+                    for nome_mod in modulos:
+                        c = f'Match_{campo}_{nome_mod}'
+                        if c not in base.columns:
+                            continue
+                        filtro = base[c].isin([DIVERGENTE, SEM_USUARIO, SEM_UUID])
+                        if not filtro.any():
+                            continue
+                        parte = base.loc[filtro, id_cols].copy()
+                        parte['Módulo'] = nome_mod
+                        parte[f'{rotulo} no Controle'] = base.loc[filtro, f'{campo}_Controle']
+                        rotulo_mod = nome_mod if campo in ('Cargo', 'Area') else 'Módulo'
+                        parte[f'{rotulo} no {rotulo_mod}'] = base.loc[filtro, f'{campo}_{nome_mod}']
+                        parte['Situação'] = base.loc[filtro, c]
+                        partes.append(parte)
+                    if not partes:
+                        return pd.DataFrame()
+                    df = pd.concat(partes, ignore_index=True)
+                    # Cargo e área só são verificados no Hub: a coluna Módulo não acrescenta nada
+                    return df.drop(columns=['Módulo']) if campo in ('Cargo', 'Area') else df
+
+                # Quem não existe em algum módulo: lista os módulos em que não foi encontrado
+                cols_existe = [f'Existe_{m}' for m in modulos]
+                faltando = base[(base[cols_existe] == 'Não').any(axis=1)]
+                df_nao_existe = faltando[id_cols + ['Username_Controle']].rename(
+                    columns={'Username_Controle': 'Username no Controle'})
+                df_nao_existe['Não existe no'] = faltando[cols_existe].apply(
+                    lambda r: ", ".join(c.replace('Existe_', '') for c in cols_existe if r[c] == 'Não'), axis=1)
+
                 planilhas = {
                     'Resumo': df_resumo,
-                    'Completo': base,
-                    'Não Existem nos Módulos': base[(base[cols_existe] == 'Não').any(axis=1)] if cols_existe else pd.DataFrame(),
-                    'Username Divergente': com_problema(['Match_Username_']),
-                    'UUID Divergente': com_problema(['Match_UUID_']),
-                    'Gestor Divergente': com_problema(['Match_Gestor_']),
-                    'Cargo e Área Divergentes': com_problema(['Match_Cargo_', 'Match_Area_']),
+                    'Não Existem nos Módulos': df_nao_existe,
+                    'Username Divergente': divergencias('Username', 'Username'),
+                    'UUID Divergente': divergencias('UUID', 'UUID'),
+                    'Gestor Divergente': divergencias('Gestor', 'Gestor'),
+                    'Cargo Divergente': divergencias('Cargo', 'Cargo'),
+                    'Área Divergente': divergencias('Area', 'Área'),
                     'Duplicados nos Módulos': pd.DataFrame(duplicados, columns=['Modulo', 'Codigo', 'Quantidade']),
+                    'Completo': base,
                 }
 
                 # Guarda os resultados na memória da sessão
@@ -426,16 +462,28 @@ def render_aba5():
 
         st.write("---")
         st.subheader("Resumo das verificações")
+        st.markdown(
+            "Cada linha é uma verificação em um módulo, sempre comparando com o funcionário no **Controle**. "
+            "Os números são quantidades de funcionários:\n"
+            "- **OK:** o valor no módulo é igual ao do Controle (na linha *Existe no ...*: o funcionário foi encontrado no módulo);\n"
+            "- **Divergente:** o funcionário existe no módulo, mas o valor é diferente do Controle;\n"
+            "- **Vazio no módulo:** o funcionário existe no módulo, mas está sem usuário ou sem UUID lá;\n"
+            "- **Não existe no módulo:** o funcionário do Controle não foi encontrado no módulo (pelo código), "
+            "então os outros campos não puderam ser comparados.\n\n"
+            "O gestor é comparado pelo **código do funcionário do gestor**. Cargo e área usam o registro **atual** "
+            "do Controle (aberto e mais recente) e são comparados sem diferenciar maiúsculas e minúsculas."
+        )
         st.markdown(st.session_state.t5_resumo.to_html(index=False), unsafe_allow_html=True)
         st.write("<br>", unsafe_allow_html=True)
 
-        # Uma prévia para cada tipo de problema
+        # Uma tabela enxuta para cada tipo de problema (o Excel traz também a base completa)
+        st.subheader("Detalhes das divergências")
         for nome in ['Não Existem nos Módulos', 'Username Divergente', 'UUID Divergente', 'Gestor Divergente',
-                     'Cargo e Área Divergentes', 'Duplicados nos Módulos']:
+                     'Cargo Divergente', 'Área Divergente', 'Duplicados nos Módulos']:
             df = planilhas.get(nome, pd.DataFrame())
             if not df.empty:
                 with st.expander(f"👁️ {nome} ({len(df)})"):
-                    st.dataframe(df, use_container_width=True)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
 
         st.download_button("📥 Baixar Análise Completa (Excel)",
                            data=gerar_excel_multi_abas({k: v for k, v in planilhas.items() if not v.empty}),
