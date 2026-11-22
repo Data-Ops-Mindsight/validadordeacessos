@@ -49,6 +49,7 @@ from abas.aba2_inativacao import render_aba2
 from abas.aba3_participantes import render_aba3
 from abas.aba4_usuarios_modulos import render_aba4
 from abas.aba5_funcionarios_modulos import render_aba5
+from abas.aba6_regras_bps import render_aba6
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -72,6 +73,9 @@ apply_style()
 # E os resultados da Aba 5:
 #   t5_processed / t5_tenant: processamento e tenant
 #   t5_final / t5_resumo / t5_planilhas / t5_mod_verificados: relatório completo, resumo, planilhas do Excel e módulos verificados
+# E os da Aba 6:
+#   t6_dados / t6_tenant: dados carregados do People Hub e tenant
+#   t6_processed / t6_csv / t6_novas / t6_existentes / t6_resumo: regras calculadas e relatórios
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "", 't1_mod_verificados': [],
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
@@ -80,7 +84,9 @@ chaves_memoria = {
     't4_processed': False, 't4_tenant': "", 't4_val1_ok': pd.DataFrame(), 't4_val1_faltantes': pd.DataFrame(), 't4_val1_fora_auth': pd.DataFrame(),
     't4_val2': pd.DataFrame(), 't4_val3': pd.DataFrame(), 't4_val_email': pd.DataFrame(), 't4_val4': pd.DataFrame(), 't4_tem_uuid': False, 't4_bases_vazias': [],
     't5_processed': False, 't5_tenant': "", 't5_final': pd.DataFrame(), 't5_resumo': pd.DataFrame(), 't5_planilhas': {},
-    't5_mod_verificados': []
+    't5_mod_verificados': [],
+    't6_dados': None, 't6_tenant': "", 't6_processed': False, 't6_csv': pd.DataFrame(), 't6_novas': pd.DataFrame(),
+    't6_existentes': pd.DataFrame(), 't6_resumo': pd.DataFrame()
 }
 
 for chave, valor in chaves_memoria.items():
@@ -124,6 +130,7 @@ st.sidebar.markdown("❌ Inativar Acessos (Desligados)")
 st.sidebar.markdown("🎯 Participantes da Rodada")
 st.sidebar.markdown("🔍 Usuários x Módulos")
 st.sidebar.markdown("👥 Funcionários x Módulos")
+st.sidebar.markdown("🛠️ Regras de Acessos (BPs)")
 
 # =============================================================================
 # CORPO PRINCIPAL
@@ -131,14 +138,13 @@ st.sidebar.markdown("👥 Funcionários x Módulos")
 st.title("Canivete Suíço de Acessos")
 
 # Criação das abas visuais
-# Observação: por enquanto apenas as Abas 1 a 5 estão implementadas; a Aba 6 ainda está vazia.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "✅ Validação (Ativos)", 
     "❌ Inativar (Desligados)", 
     "🎯 Participantes (Rodada)", 
     "🔍 Usuários x Módulos",
     "👥 Funcionários x Módulos",
-    "🛠️ Criador de Regras"
+    "🛠️ Criador de Regras de Acessos (BPs)"
 ])
 
 # Renderização do conteúdo de cada aba de forma modular
@@ -156,3 +162,6 @@ with tab4:
 
 with tab5:
     render_aba5()
+
+with tab6:
+    render_aba6()
