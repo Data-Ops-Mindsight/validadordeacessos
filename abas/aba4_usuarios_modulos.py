@@ -10,51 +10,22 @@ Validações geradas (cada uma com um Excel para baixar):
   1. Presença: em quais módulos cada usuário do Auth existe (pelo username);
   2. Possíveis duplicados: mesmo nome completo com mais de um username ou email;
   3. Divergência de username: mesmo email com username diferente entre Auth e módulo;
-  4. UUIDs: compara o UUID do Auth com o de cada módulo (pelo username).
+  4. Divergência de email: mesmo username com email diferente entre Auth e módulo;
+  5. UUIDs: compara o UUID do Auth com o de cada módulo (pelo username).
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
 import time
 
 # Como o arquivo é executado a partir do app.py (na raiz), importamos diretamente
 from functions import *
+from abas.exportacao_admin import ler_csv_modulo, render_instrucoes_exportacao
 
 MIME_EXCEL = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MODULOS = ['Controle', 'Full', 'Performance', 'Metas']
 VAZIOS = ['nan', 'none', '', '-']
-
-# Favorito (bookmarklet) que exporta os usuários das telas de admin em CSV
-ARQUIVO_FAVORITO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'ferramentas', 'bookmarklet_exportar_usuarios.txt')
-
-
-def _codigo_favorito():
-    """Lê o código do favorito para exibir na tela (vazio se o arquivo não existir)."""
-    try:
-        with open(ARQUIVO_FAVORITO, encoding='utf-8') as f:
-            return f.read().strip()
-    except OSError:
-        return ""
-
-
-def _ler_csv_modulo(arquivo, nome_modulo, prefixo_esperado):
-    """
-    Lê o CSV exportado pelo favorito para um módulo (Performance ou Metas).
-    Confere se é o arquivo certo (pelo nome) e se tem a coluna username.
-    """
-    nome_arquivo = (arquivo.name or "").lower()
-    outros = {'performance_', 'metas_'} - {prefixo_esperado}
-    if any(nome_arquivo.startswith(o) for o in outros):
-        raise ValueError(f"o arquivo enviado em '{nome_modulo}' parece ser de outro módulo ({arquivo.name}).")
-    df = ler_csv_seguro(arquivo)
-    if 'username' not in df.columns:
-        raise ValueError(f"o CSV do {nome_modulo} não possui a coluna 'username'. "
-                         "Gere o arquivo pelo favorito 'Exportar usuários'.")
-    return df
-
 
 def _limpar_base(df):
     """Remove usuários da Mindsight e padroniza username/email (minúsculo, sem espaços)."""
@@ -88,7 +59,8 @@ def render_aba4():
         "2. **Possíveis duplicados:** nomes completos com mais de um username ou email (pode ser homônimo, "
         "mas também um funcionário cadastrado duas vezes);\n"
         "3. **Divergência de username:** mesmo email com username diferente entre o Auth e o módulo;\n"
-        "4. **Conferência de UUIDs:** o UUID do Auth comparado com o de cada módulo (exige a coluna `uuid` na base do Auth)."
+        "4. **Divergência de email:** mesmo username com email diferente entre o Auth e o módulo;\n"
+        "5. **Conferência de UUIDs:** o UUID do Auth comparado com o de cada módulo (exige a coluna `uuid` na base do Auth)."
     )
 
     # -------------------------------------------------------------------------
@@ -107,81 +79,11 @@ def render_aba4():
     # -------------------------------------------------------------------------
     st.markdown("### 📁 Bases de Usuários")
 
-    # Passo a passo para gerar os CSVs do Performance e do Metas
-    with st.expander("❓ Como gerar os CSVs do Performance e do Metas"):
-        # --- Por que a exportação é feita assim ---
-        st.markdown(
-            "#### Por que é preciso exportar assim?\n"
-            "- No **Performance**, o admin do Django **não tem a opção de exportar** os usuários;\n"
-            "- No **Metas**, a exportação do Django **não traz o UUID** dos usuários;\n"
-            "- Pela **API**, essas informações também não vêm.\n\n"
-            "Por isso usamos um **favorito do navegador** chamado **Exportar usuários**. Ao clicar nele, com a tela "
-            "de usuários do admin aberta, ele percorre **todas as páginas** da tabela e baixa um arquivo CSV com "
-            "usuário, email, nome, sobrenome, status e UUID. Ele usa o login que você já tem aberto no navegador e "
-            "**apenas lê** a tabela: nada é alterado no sistema."
-        )
-
-        # --- Passo 1: criar o favorito ---
-        st.markdown(
-            "#### Passo 1 - Criar o favorito (só na primeira vez)\n"
-            "Copie o código abaixo (ícone de copiar no canto direito da caixa). Ele começa com `javascript:` "
-            "e é ele que vai no lugar do endereço do favorito."
-        )
-        codigo = _codigo_favorito()
-        if codigo:
-            st.code(codigo, language=None)
-        else:
-            st.warning("Arquivo do favorito não encontrado (ferramentas/bookmarklet_exportar_usuarios.txt).")
-
-        st.markdown("Depois siga os passos do seu navegador:")
-        aba_edge, aba_chrome, aba_firefox = st.tabs(["Microsoft Edge", "Google Chrome", "Mozilla Firefox"])
-        with aba_edge:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Em qualquer página aberta, clique com o botão direito na barra de favoritos e escolha "
-                "**Adicionar esta página aos favoritos**. Clique em **Concluído**;\n"
-                "3. Clique com o botão direito no favorito que acabou de aparecer na barra e escolha **Editar**;\n"
-                "4. Em **Nome**, escreva `Exportar usuários`;\n"
-                "5. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
-                "6. Clique em **Salvar**."
-            )
-        with aba_chrome:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar página...**;\n"
-                "3. Em **Nome**, escreva `Exportar usuários`;\n"
-                "4. Em **URL**, apague o endereço que estiver lá e cole o código copiado;\n"
-                "5. Clique em **Salvar**."
-            )
-        with aba_firefox:
-            st.markdown(
-                "1. Deixe a barra de favoritos visível com **Ctrl + Shift + B**;\n"
-                "2. Clique com o botão direito na barra de favoritos e escolha **Adicionar favorito...**;\n"
-                "3. Em **Nome**, escreva `Exportar usuários`;\n"
-                "4. Em **URL**, cole o código copiado;\n"
-                "5. Clique em **Salvar**."
-            )
-        st.caption("Ao final, o favorito **Exportar usuários** aparece na barra de favoritos. Não é preciso criar de novo nas próximas vezes.")
-
-        # --- Passo 2 e 3: exportar ---
-        st.markdown(
-            "#### Passo 2 - Exportar os usuários do Performance\n"
-            "1. Entre no Performance normalmente (com o seu login de sempre);\n"
-            "2. Abra a tela de usuários do admin: `https://performance.mindsight.com.br/<tenant>/staff/accounts/user/` "
-            "(troque `<tenant>` pelo tenant do cliente);\n"
-            "3. Clique no favorito **Exportar usuários**. Um aviso roxo aparece no canto superior direito mostrando "
-            "o andamento;\n"
-            "4. Ao terminar, o arquivo `performance_<tenant>_usuarios.csv` é baixado.\n\n"
-            "#### Passo 3 - Exportar os usuários do Metas\n"
-            "1. Abra a tela de usuários do admin do Metas: `https://acompanhamento.mindsight.com.br/<tenant>/admin/accounts/user/`;\n"
-            "2. Clique no favorito **Exportar usuários**;\n"
-            "3. Ao terminar, o arquivo `metas_<tenant>_usuarios.csv` é baixado.\n\n"
-            "#### Passo 4 - Enviar os arquivos\n"
-            "Envie nos campos abaixo a **base do Auth**, o **CSV do Performance** e o **CSV do Metas**, "
-            "preencha o tenant e os tokens e clique em **Processar Validações de Módulos**."
-        )
-        st.caption("💡 Se o favorito mostrar “Abra a tela de usuários do admin”, confira se você está na tela "
-                   "`accounts/user/` (lista de usuários) e logado no módulo.")
+    # Passo a passo para gerar os CSVs do Performance e do Metas (compartilhado com a Aba 1)
+    render_instrucoes_exportacao(
+        "Envie nos campos abaixo a **base do Auth**, o **CSV do Performance** e o **CSV do Metas**, "
+        "preencha o tenant e os tokens e clique em **Processar Validações de Módulos**."
+    )
 
     c4, c5, c6 = st.columns(3)
     arquivo_auth_t4 = c4.file_uploader("Base do Auth (.csv)", type=['csv'], key="arquivo_auth_t4")
@@ -218,11 +120,11 @@ def render_aba4():
 
                 # --- 4/5: Performance (CSV exportado pelo favorito) ---
                 bar.progress(65, text="4/5 - Lendo usuários do Performance...")
-                df_perf = _limpar_base(_ler_csv_modulo(arquivo_perf_t4, "Performance", "performance_"))
+                df_perf = _limpar_base(ler_csv_modulo(arquivo_perf_t4, "Performance", "performance_"))
 
                 # --- 5/5: Metas (CSV exportado pelo favorito) ---
                 bar.progress(80, text="5/5 - Lendo usuários do Metas...")
-                df_metas = _limpar_base(_ler_csv_modulo(arquivo_metas_t4, "Metas", "metas_"))
+                df_metas = _limpar_base(ler_csv_modulo(arquivo_metas_t4, "Metas", "metas_"))
 
                 bases = {'Controle': df_controle, 'Full': df_full, 'Performance': df_perf, 'Metas': df_metas}
                 bar.progress(92, text="Cruzando dados...")
@@ -300,7 +202,24 @@ def render_aba4():
                         div_list.append(diff[['Email', 'Username_Auth', 'Username_Modulo', 'Nome_Auth', 'Nome_Modulo', 'Modulo_Divergente']])
                 df_val3 = pd.concat(div_list, ignore_index=True) if div_list else pd.DataFrame()
 
-                # --- Validação 4: UUID do Auth x UUID de cada módulo ---
+                # --- Validação 4: mesmo username com email diferente (Auth x módulo) ---
+                email_list = []
+                da_email = df_auth[['username', 'email']].copy()
+                for nome, base in bases.items():
+                    if base.empty or 'email' not in base.columns:
+                        continue
+                    db = base[['username', 'email']].drop_duplicates('username')
+                    m = da_email.merge(db, on='username', suffixes=('_auth', '_mod'))
+                    # Só compara quando os dois lados têm email preenchido
+                    m = m[m['email_auth'].apply(_valido) & m['email_mod'].apply(_valido)]
+                    diff = m[m['email_auth'] != m['email_mod']].copy()
+                    if not diff.empty:
+                        diff['Modulo_Divergente'] = nome
+                        diff = diff.rename(columns={'username': 'Username', 'email_auth': 'Email_Auth', 'email_mod': 'Email_Modulo'})
+                        email_list.append(diff[['Username', 'Email_Auth', 'Email_Modulo', 'Modulo_Divergente']])
+                df_val_email = pd.concat(email_list, ignore_index=True) if email_list else pd.DataFrame()
+
+                # --- Validação 5: UUID do Auth x UUID de cada módulo ---
                 df_val4 = pd.DataFrame()
                 if 'uuid' in df_auth.columns:
                     df_val4 = df_auth[['username', 'uuid']].copy().rename(columns={'uuid': 'UUID_Auth'})
@@ -321,6 +240,7 @@ def render_aba4():
                 st.session_state.t4_val1_fora_auth = df_fora_auth
                 st.session_state.t4_val2 = df_val2
                 st.session_state.t4_val3 = df_val3
+                st.session_state.t4_val_email = df_val_email
                 st.session_state.t4_val4 = df_val4
                 st.session_state.t4_tem_uuid = 'uuid' in df_auth.columns
                 st.session_state.t4_bases_vazias = [n for n, b in bases.items() if b.empty]
@@ -398,7 +318,20 @@ def render_aba4():
 
         # 4ª validação
         st.write("---")
-        st.subheader("4ª Validação: Conferência de UUIDs")
+        st.subheader("4ª Validação: Divergências de Email")
+        df_email = st.session_state.get('t4_val_email', pd.DataFrame())
+        if df_email.empty:
+            st.info("Nenhuma divergência de email encontrada.")
+        else:
+            st.markdown(f"**{len(df_email)}** usuários com o mesmo username e email diferente entre o Auth e algum módulo.")
+            with st.expander("👁️ Ver divergências de email"):
+                st.dataframe(df_email, use_container_width=True)
+            st.download_button("📥 Baixar Divergências de Email (Excel)", data=gerar_excel(df_email),
+                               file_name=f"{tenant}_validacao_divergencias_email.xlsx", mime=MIME_EXCEL, key="down_v5")
+
+        # 5ª validação
+        st.write("---")
+        st.subheader("5ª Validação: Conferência de UUIDs")
         if not st.session_state.t4_tem_uuid:
             st.warning("A base do Auth não possui a coluna `uuid`, então esta validação não foi feita.")
         elif not st.session_state.t4_val4.empty:

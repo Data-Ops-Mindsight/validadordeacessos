@@ -3,14 +3,19 @@ Aba 1 - Validação de Acessos dos colaboradores ATIVOS.
 
 Fluxo da aba:
   1. O usuário informa tenant, tokens e as regras de acesso desejadas.
-  2. Faz upload da base de usuários exportada do Auth (.csv).
+  2. Faz upload da base de usuários exportada do Auth (.csv) e, opcionalmente,
+     dos CSVs de usuários do Performance e do Metas (favorito "Exportar usuários").
   3. Ao clicar em "Processar Validação", a ferramenta:
        - busca no Controle quem está ativo (e, se preciso, quem é gestor);
        - busca no People Hub (Full) quem já está ativo lá (se houver token);
        - cruza tudo com a base do Auth e aplica as regras;
   4. Gera dois arquivos para upload no Auth:
        - PASSO 1: ajustes de acessos e reativação de usuários;
-       - PASSO 2: "trick" de reativação do Full (só para quem estava inativo no Hub).
+       - PASSO 2: "tricks" que completam o Passo 1:
+           * reativação: o módulo (full, metas ou performance) sai no Passo 1 e
+             volta no Passo 2, para quem está INATIVO no módulo;
+           * nome: o first_name sobe alterado no Passo 1 e volta ao original no
+             Passo 2, para quem NÃO EXISTE no Metas/Performance.
 """
 
 import streamlit as st
@@ -21,6 +26,20 @@ import io
 
 # Como o arquivo é executado a partir do app.py (na raiz), importamos diretamente
 from functions import *
+from abas.exportacao_admin import ler_csv_modulo, render_instrucoes_exportacao
+
+
+def mapa_status_modulo(df_modulo):
+    """
+    A partir do CSV de um módulo (Metas ou Performance), devolve um dicionário
+    username (minúsculo) -> 'ativo' ou 'inativo'. Quem não estiver no dicionário
+    não existe no módulo.
+    """
+    df = df_modulo.copy()
+    df['_usuario'] = df['username'].astype(str).str.strip().str.lower()
+    df['_ativo'] = df['is_active'].astype(str).str.strip().str.lower().isin(['1', '1.0', 'true', 'sim'])
+    ativos = df.groupby('_usuario')['_ativo'].any()   # se houver duplicado, vale o ativo
+    return {u: (STATUS_ATIVO if a else STATUS_INATIVO) for u, a in ativos.items()}
 
 
 def gerar_downloads(df_final, tenant, sufixo, sufixo_parte, rotulo_csv, chave, chunk_size):
@@ -64,8 +83,17 @@ def render_aba1():
         "📄 **O que os arquivos gerados fazem?** Trazem apenas os usuários que precisam de algum ajuste:\n"
         "- **Passo 1:** atualiza a coluna `access_to_systems` com os módulos corretos e deixa o usuário "
         "ativo no Auth (`1` na coluna `is_active`). A coluna `motivo_ajuste` mostra o que mudou;\n"
-        "- **Passo 2:** só aparece para quem deve ter o People Hub mas está inativo nele. Devolve o "
-        "módulo `full`, que foi retirado no Passo 1, para forçar a reativação no Hub. Suba-o **depois** do Passo 1."
+        "- **Passo 2:** só traz quem precisa de um dos *tricks* abaixo. Suba-o **depois** do Passo 1.\n\n"
+        "🔁 **Tricks (Passo 1 + Passo 2):** só subir o acesso de novo não resolve quando o usuário já tem o "
+        "módulo no Auth mas está inativo ou não existe dentro do módulo. Por isso:\n"
+        "- **Inativo no módulo** (People Hub, Metas ou Performance) → **trick de reativação**: o módulo **sai** "
+        "do `access_to_systems` no Passo 1 e **volta** no Passo 2, o que força a reativação;\n"
+        "- **Não existe no módulo** (Metas ou Performance) → **trick do nome**: o `first_name` sobe "
+        "**alterado** (tudo minúsculo) no Passo 1 e volta ao **nome original** no Passo 2. A troca gera a "
+        "tarefa de alteração do usuário, que cria o usuário no módulo.\n\n"
+        "Para o People Hub a situação vem da API (token do Full). Para o **Metas** e o **Performance**, envie "
+        "os CSVs gerados pelo favorito **Exportar usuários** (opcional: sem o CSV, os tricks daquele módulo "
+        "não são verificados)."
     )
 
     # -------------------------------------------------------------------------
@@ -138,8 +166,22 @@ def render_aba1():
     # -------------------------------------------------------------------------
     # SEÇÃO 4: BASE DO AUTH E PROCESSAMENTO
     # -------------------------------------------------------------------------
-    st.markdown("### 📁 Base de Usuários (Auth)")
+    st.markdown("### 📁 Bases de Usuários")
     arquivo_auth_t1 = st.file_uploader("Faça o upload da base exportada do Auth (.csv)", type=['csv'], key="arquivo_auth_t1")
+
+    # CSVs opcionais do Performance e do Metas, usados para os tricks desses módulos
+    st.markdown("**Opcional:** usuários do Performance e do Metas, para identificar quem está inativo ou "
+                "não existe nesses módulos (tricks de reativação e do nome).")
+    render_instrucoes_exportacao(
+        "Envie nos campos abaixo o **CSV do Performance** e/ou o **CSV do Metas**, junto com a base do Auth, "
+        "e clique em **Processar Validação**. Se um dos arquivos não for enviado, os tricks daquele módulo "
+        "não são verificados."
+    )
+    c9, c10 = st.columns(2)
+    arquivo_perf_t1 = c9.file_uploader("Usuários do Performance (.csv) - opcional", type=['csv'], key="arquivo_perf_t1",
+                                       help="Arquivo performance_<tenant>_usuarios.csv gerado pelo favorito.")
+    arquivo_metas_t1 = c10.file_uploader("Usuários do Metas (.csv) - opcional", type=['csv'], key="arquivo_metas_t1",
+                                         help="Arquivo metas_<tenant>_usuarios.csv gerado pelo favorito.")
 
     chunk_size = st.number_input("Dividir arquivos finais de quantos em quantos usuários? (Deixe 0 para não dividir)", min_value=0, value=0, step=100)
 
@@ -162,6 +204,15 @@ def render_aba1():
                 if 'username' not in df_usuarios_auth.columns:
                     st.error("Erro: A base não possui a coluna 'username'.")
                     st.stop()
+
+                # --- CSVs opcionais do Performance e do Metas (situação de cada usuário no módulo) ---
+                mapas_status = {}
+                if arquivo_perf_t1:
+                    mapas_status['performance'] = mapa_status_modulo(
+                        ler_csv_modulo(arquivo_perf_t1, "Performance", "performance_", exigir_ativo=True))
+                if arquivo_metas_t1:
+                    mapas_status['metas'] = mapa_status_modulo(
+                        ler_csv_modulo(arquivo_metas_t1, "Metas", "metas_", exigir_ativo=True))
 
                 # --- Consultas às APIs (cada uma com mensagem de erro clara) ---
                 bar.progress(10, text="Obtendo Funcionários do Controle...")
@@ -248,7 +299,13 @@ def render_aba1():
                 bar.progress(90, text="Gerando base de correção...")
                 df_add_acessos = df_usuarios_auth_limpo.merge(df_validacao[['username', 'sou_gestor', 'is_active_full']], on='username', how='inner').copy()
 
-                df_add_acessos[['acessos_csv1', 'acessos_csv2', 'vai_pro_csv1', 'vai_pro_csv2', 'motivo']] = df_add_acessos.apply(
+                # Situação no Metas/Performance: ativo, inativo ou inexistente (só se o CSV foi enviado)
+                for modulo, mapa in mapas_status.items():
+                    df_add_acessos[f'status_{modulo}'] = (df_add_acessos['username'].astype(str).str.strip().str.lower()
+                                                          .map(mapa).fillna(STATUS_INEXISTENTE))
+
+                df_add_acessos[['acessos_csv1', 'acessos_csv2', 'vai_pro_csv1', 'vai_pro_csv2', 'motivo',
+                                'nome_csv1', 'nome_csv2', 'motivo_passo2']] = df_add_acessos.apply(
                     lambda row: formatar_acessos_duplo(row, acesso_full_t1, lista_acessos_controle, bool(token_full_t1), validacao_t1, acesso_ats_t1, lista_acessos_ats, lista_acessos_hub, rem_ctrl_t1, rem_ats_t1, rem_hub_t1), axis=1
                 )
 
@@ -257,6 +314,7 @@ def render_aba1():
                 st.session_state.t1_df2 = df_add_acessos[df_add_acessos['vai_pro_csv2'] == True].copy()
                 st.session_state.t1_len = len(df_mais_recente_ativos)
                 st.session_state.t1_tenant = tenant_t1
+                st.session_state.t1_mod_verificados = [NOMES_MODULOS[m] for m in ['performance', 'metas'] if m in mapas_status]
                 st.session_state.t1_processed = True
 
                 bar.progress(100, text="Concluído!")
@@ -269,6 +327,7 @@ def render_aba1():
                 st.error(f"❌ Falha na comunicação com a API. {e}")
             except Exception as e:
                 bar.empty()
+                st.session_state.t1_processed = False
                 st.error(f"Ocorreu um erro: {e}")
 
     # -------------------------------------------------------------------------
@@ -276,12 +335,22 @@ def render_aba1():
     # -------------------------------------------------------------------------
     if st.session_state.t1_processed:
         st.success(f"✅ Validação concluída! Funcionários Ativos identificados: {st.session_state.t1_len}")
+        verificados = st.session_state.get('t1_mod_verificados', [])
+        if verificados:
+            st.caption(f"Tricks verificados no Metas/Performance pelos CSVs enviados: {', '.join(verificados)}.")
+        else:
+            st.caption("Os CSVs do Performance e do Metas não foram enviados: os tricks desses módulos não foram verificados.")
 
         # PASSO 1: ajustes de acessos e ativação de usuários
         if not st.session_state.t1_df1.empty:
-            df_final_1 = montar_df_upload(st.session_state.t1_df1, 'acessos_csv1', incluir_motivo=True)
+            df_final_1 = montar_df_upload(st.session_state.t1_df1, 'acessos_csv1', incluir_motivo=True, coluna_nome='nome_csv1')
             st.write("### PASSO 1: Ajustes de Acessos / Ativação")
-            st.info("💡 **O que é este passo?** Esta base contém os usuários que precisam ter seus acessos atualizados (ex: adicionar Metas, Performance, ATS, Organograma) ou que estão inativos no Auth e precisam ser reativados. **Suba este arquivo primeiro.**")
+            st.info("💡 **O que é este passo?** Esta base contém os usuários que precisam ter seus acessos atualizados "
+                    "(ex: adicionar Metas, Performance, ATS, Organograma) ou que estão inativos no Auth e precisam ser "
+                    "reativados. Também traz a **primeira metade dos tricks**: para quem está inativo em um módulo, o "
+                    "módulo **sai** do `access_to_systems`; para quem não existe no Metas/Performance, o `first_name` "
+                    "sobe **alterado** (tudo minúsculo). Não se preocupe: o Passo 2 desfaz essas mudanças. "
+                    "**Suba este arquivo primeiro.**")
 
             # Resumo de quantos usuários tiveram cada tipo de ajuste
             motivos = df_final_1['motivo_ajuste'].value_counts().reset_index()
@@ -299,11 +368,25 @@ def render_aba1():
 
         # PASSO 2: trick de reativação do Full
         if not st.session_state.t1_df2.empty:
-            df_final_2 = montar_df_upload(st.session_state.t1_df2, 'acessos_csv2', False)
-            st.write("### PASSO 2: Reativação do Full")
-            st.info("💡 **O que é este passo?** Esta base serve exclusivamente para o *Trick* do People Hub. Ela pega os usuários que estavam inativos no Hub e re-adiciona o acesso 'full' (que foi removido no Passo 1) para forçar a sincronização. **Suba este arquivo APENAS DEPOIS de concluir o Passo 1.**")
+            df_final_2 = montar_df_upload(st.session_state.t1_df2, 'acessos_csv2', incluir_motivo=True,
+                                          coluna_nome='nome_csv2', coluna_motivo='motivo_passo2')
+            st.write("### PASSO 2: Tricks de Reativação e Criação nos Módulos")
+            st.info("💡 **O que é este passo?** Completa os tricks iniciados no Passo 1:\n"
+                    "- **Trick de reativação:** devolve o módulo (`full`, `metas` ou `performance`) que foi retirado no "
+                    "Passo 1, para quem está **inativo** nele. A saída e a volta do módulo forçam a reativação;\n"
+                    "- **Trick do nome:** volta o `first_name` ao **nome original**, para quem **não existe** no Metas ou "
+                    "no Performance. A troca de nome gera a tarefa de alteração que cria o usuário no módulo.\n\n"
+                    "A coluna `motivo_ajuste` mostra o que cada linha faz. "
+                    "**Suba este arquivo APENAS DEPOIS de concluir o Passo 1.**")
 
-            gerar_downloads(df_final_2, st.session_state.t1_tenant, "reativacao_full", "reativacao",
+            motivos2 = df_final_2['motivo_ajuste'].str.split('; ').explode().value_counts().reset_index()
+            motivos2.columns = ['Motivo', 'Quantidade']
+            st.markdown(motivos2.to_html(index=False), unsafe_allow_html=True)
+            st.write("<br>", unsafe_allow_html=True)
+            with st.expander("👁️ Ver lista de usuários do Passo 2"):
+                st.dataframe(df_final_2[['username', 'email', 'first_name', 'last_name', 'motivo_ajuste']], use_container_width=True)
+
+            gerar_downloads(df_final_2, st.session_state.t1_tenant, "passo2_tricks", "tricks",
                             "📥 Baixar Base PASSO 2 (CSV)", "down2", chunk_size)
         else:
             st.info("Nenhum ajuste necessário para o PASSO 2.")

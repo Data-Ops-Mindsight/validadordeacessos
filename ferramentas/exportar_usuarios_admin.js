@@ -30,52 +30,66 @@
     const el = linha.querySelector(seletor);
     return el ? el.textContent.trim() : '';
   };
-  const usuarios = new Map();
   const base = location.origin + location.pathname;
 
-  // Lê uma página da listagem e devolve quantos usuários novos ela trouxe (null = página inválida)
-  async function lerPagina(p) {
-    const resp = await fetch(base + '?p=' + p, { credentials: 'same-origin' });
+  // Lê uma página da listagem. Devolve a lista de usuários da página, ou null se a página for inválida.
+  async function lerPagina(filtro, p) {
+    const url = base + '?' + (filtro ? filtro + '&' : '') + 'p=' + p;
+    const resp = await fetch(url, { credentials: 'same-origin' });
     if (!resp.ok || resp.url.includes('login') || resp.url.includes('e=1')) return null;
     const doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
     const linhas = doc.querySelectorAll('#result_list tbody tr');
-    if (!linhas.length) return null;
-    let novos = 0;
+    const lista = [];  // página válida sem linhas (ex.: filtro sem resultados) devolve lista vazia
     linhas.forEach((linha) => {
       const username = texto(linha, '.field-username') || texto(linha, 'th a');
-      if (!username || usuarios.has(username)) return;
-      const ativo = linha.querySelector('.field-is_active img');
+      if (!username) return;
       const staff = linha.querySelector('.field-is_staff img');
-      usuarios.set(username, {
+      lista.push({
         username: username,
         email: texto(linha, '.field-email'),
         first_name: texto(linha, '.field-first_name'),
         last_name: texto(linha, '.field-last_name'),
-        is_active: ativo ? (ativo.getAttribute('alt') === 'True' ? 1 : 0) : '',
         is_staff: staff ? (staff.getAttribute('alt') === 'True' ? 1 : 0) : '',
         uuid: texto(linha, '.field-uuid'),
       });
-      novos++;
     });
-    return novos;
+    return lista;
   }
 
-  try {
-    // A paginação do Django Admin começa em 0 ou em 1, dependendo da versão.
-    // Lê a partir de 0 e para quando uma página não traz nenhum usuário novo.
-    let p = 0, tentouExtra = false;
+  // Lê todas as páginas (com um filtro opcional, ex.: 'is_active__exact=1').
+  // A paginação do Django Admin começa em 0 ou em 1, dependendo da versão:
+  // lê a partir de 0 e para quando uma página não traz nenhum usuário novo.
+  // Devolve um Map username -> usuário, ou null se o filtro não existir na tela.
+  async function lerTodas(filtro, etapa) {
+    const usuarios = new Map();
+    let p = 0, tentouExtra = false, algumaValida = false;
     while (true) {
-      mostrar('Exportando usuários... página ' + (p + 1) + ' (' + usuarios.size + ' até agora)');
-      const novos = await lerPagina(p);
-      if (novos === null) {
-        if (p === 0) { p = 1; continue; }        // paginação começa em 1
-        break;                                   // passou da última página
+      mostrar(etapa + '... página ' + (p + 1) + ' (' + usuarios.size + ' até agora)');
+      const lista = await lerPagina(filtro, p);
+      if (lista === null) {
+        if (p === 0) { p = 1; continue; }
+        break;
       }
+      algumaValida = true;
+      let novos = 0;
+      lista.forEach((u) => { if (!usuarios.has(u.username)) { usuarios.set(u.username, u); novos++; } });
       if (novos === 0) {
         if (p === 1 && !tentouExtra) { tentouExtra = true; p++; continue; }
         break;
       }
       p++;
+    }
+    return algumaValida ? usuarios : (filtro ? null : usuarios);
+  }
+
+  try {
+    // 1ª passada: todos os usuários
+    const usuarios = await lerTodas('', 'Exportando usuários');
+
+    // 2ª passada: só os ativos (filtro "Por ativo = Sim"), para preencher a coluna is_active
+    if (usuarios.size) {
+      const ativos = await lerTodas('is_active__exact=1', 'Verificando usuários ativos');
+      usuarios.forEach((u) => { u.is_active = ativos === null ? '' : (ativos.has(u.username) ? 1 : 0); });
     }
 
     if (!usuarios.size) {
@@ -87,7 +101,7 @@
     // Monta o CSV (separador vírgula, com BOM para abrir certo no Excel)
     const colunas = ['username', 'email', 'first_name', 'last_name', 'is_active', 'is_staff', 'uuid'];
     const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
-    const csv = '﻿' + [colunas.join(',')]
+    const csv = '\ufeff' + [colunas.join(',')]
       .concat([...usuarios.values()].map((u) => colunas.map((c) => esc(u[c])).join(',')))
       .join('\r\n');
 

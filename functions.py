@@ -241,16 +241,49 @@ ATS_GESTORES = 'Gestores'
 ATS_ESPECIFICOS = 'Usuários específicos'
 
 
+# Situação do usuário dentro de um módulo (Metas/Performance), vinda do CSV do favorito
+STATUS_ATIVO = 'ativo'
+STATUS_INATIVO = 'inativo'
+STATUS_INEXISTENTE = 'inexistente'
+NOMES_MODULOS = {'metas': 'Metas', 'performance': 'Performance', 'full': 'People Hub'}
+
+
+def nome_para_trick(nome):
+    """
+    Devolve o first_name alterado usado no trick do nome: tudo minúsculo
+    (ou tudo maiúsculo, se o nome já estiver minúsculo). Se o nome não tiver
+    letras, acrescenta um ponto no final.
+    """
+    nome = '' if pd.isna(nome) else str(nome)
+    if nome.lower() != nome:
+        return nome.lower()
+    if nome.upper() != nome:
+        return nome.upper()
+    return nome + '.'
+
+
 def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, validacao, opcao_ats, lista_ats, lista_hub, rem_ctrl, rem_ats, rem_hub):
     """
-    Recebe uma linha (um usuário) e calcula como deve ficar o access_to_systems.
+    Recebe uma linha (um usuário) e calcula como ele deve subir no Passo 1 e no Passo 2.
 
-    Retorna 5 valores:
-      - acessos do CSV 1 (Passo 1: ajustes/ativação);
-      - acessos do CSV 2 (Passo 2: trick de reativação do Full);
+    Retorna 8 valores:
+      - acessos do CSV 1 (Passo 1);
+      - acessos do CSV 2 (Passo 2);
       - se o usuário entra no CSV 1;
       - se o usuário entra no CSV 2;
-      - os motivos do ajuste (texto para conferência).
+      - os motivos do Passo 1 (texto para conferência);
+      - o first_name do CSV 1;
+      - o first_name do CSV 2;
+      - os motivos do Passo 2.
+
+    Tricks (usam o Passo 1 e o Passo 2):
+      - Trick de reativação: o usuário deve ter o módulo (full, metas ou performance),
+        mas está INATIVO nele. O módulo sai no Passo 1 e volta no Passo 2.
+      - Trick do nome: o usuário deve ter o módulo (metas ou performance), mas ele
+        NÃO EXISTE no módulo. O first_name sobe alterado (minúsculo) no Passo 1 e
+        volta ao original no Passo 2, gerando a tarefa de alteração que cria o usuário.
+    A situação no Metas/Performance vem das colunas 'status_metas'/'status_performance'
+    (ativo, inativo ou inexistente). Sem o CSV do módulo, esses tricks não são aplicados.
 
     Parâmetros de regra:
       opcao_full / opcao_ats: opção escolhida nos campos de acesso ao People Hub / ATS.
@@ -263,6 +296,8 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
     is_active_full = row['is_active_full']
     is_active_auth = row['is_active']
     username = str(row['username']).strip()
+    nome_original = row.get('first_name', '')
+    nome_original = '' if pd.isna(nome_original) else str(nome_original)
 
     # Converte o texto atual (ex.: "'metas', 'performance'") em lista limpa e minúscula
     if pd.isna(valor_atual) or str(valor_atual).lower() == 'nan' or str(valor_atual) == '':
@@ -272,8 +307,10 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
         lista_atual = [s.strip() for s in limpo.split(',') if s.strip()]
 
     lista_csv1 = lista_atual.copy()
-    lista_csv2 = None   # só é preenchida quando o usuário precisa do trick do Full
+    readicionar = []        # módulos que saem no Passo 1 e voltam no Passo 2 (trick de reativação)
+    trick_nome = []         # módulos em que o usuário não existe (trick do nome)
     motivos = []
+    motivos2 = []
 
     # 1. Usuário inativo no Auth precisa ser reativado
     precisa_ativar = is_active_auth not in [1, '1', True, 'True', 1.0]
@@ -284,13 +321,26 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
     precisa_metas = validacao in ['Validação padrão (metas, perfomance)', 'Validar somente metas']
     precisa_performance = validacao in ['Validação padrão (metas, perfomance)', 'Validar somente performance']
 
-    if precisa_metas and 'metas' not in lista_csv1:
-        lista_csv1.append('metas')
-        motivos.append('faltava metas')
-
-    if precisa_performance and 'performance' not in lista_csv1:
-        lista_csv1.append('performance')
-        motivos.append('faltava performance')
+    for modulo, precisa in [('metas', precisa_metas), ('performance', precisa_performance)]:
+        if not precisa:
+            continue
+        status = row.get(f'status_{modulo}')
+        nome_mod = NOMES_MODULOS[modulo]
+        if status == STATUS_INATIVO:
+            # Trick de reativação: sobe SEM o módulo no Passo 1 e COM ele no Passo 2
+            if modulo in lista_csv1:
+                lista_csv1.remove(modulo)
+                motivos.append(f'remover {modulo} para trick de reativação (inativo no {nome_mod})')
+            else:
+                motivos.append(f'faltava {modulo} e está inativo no {nome_mod} (enviado direto para o trick)')
+            readicionar.append(modulo)
+        else:
+            if modulo not in lista_csv1:
+                lista_csv1.append(modulo)
+                motivos.append(f'faltava {modulo}')
+            if status == STATUS_INEXISTENTE:
+                # Trick do nome: o usuário não existe no módulo
+                trick_nome.append(modulo)
 
     # 3. Controle (organograma): só quem está na lista restrita recebe
     if username in lista_controle:
@@ -335,15 +385,14 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
 
         if alvo_da_regra_full:
             if not is_active_full:
-                # "Trick" de reativação: no Passo 1 o usuário sobe SEM 'full' e,
+                # Trick de reativação: no Passo 1 o usuário sobe SEM 'full' e,
                 # no Passo 2, sobe COM 'full', forçando a sincronização com o Hub.
                 if 'full' in lista_csv1:
                     lista_csv1.remove('full')
                     motivos.append('remover full para trick de reativação')
                 else:
                     motivos.append('faltava full (enviado direto para o trick)')
-                lista_csv2 = lista_csv1.copy()
-                lista_csv2.append('full')
+                readicionar.append('full')
             else:
                 if 'full' not in lista_csv1:
                     lista_csv1.append('full')
@@ -353,16 +402,34 @@ def formatar_acessos_duplo(row, opcao_full, lista_controle, tem_token_full, vali
                 lista_csv1.remove('full')
                 motivos.append('remover full')
 
+    # 6. Trick do nome: Passo 1 com o first_name alterado, Passo 2 com o original
+    nome_csv1 = nome_csv2 = nome_original
+    if trick_nome:
+        nome_csv1 = nome_para_trick(nome_original)
+        modulos_txt = ' e '.join(NOMES_MODULOS[m] for m in trick_nome)
+        motivos.append(f'trocar o nome para criar o usuário no {modulos_txt} (não existe lá)')
+        motivos2.append(f'voltar o nome original (trick de criação no {modulos_txt})')
+
+    # Passo 2: devolve os módulos retirados no Passo 1
+    lista_csv2 = lista_csv1.copy()
+    for modulo in readicionar:
+        if modulo not in lista_csv2:
+            lista_csv2.append(modulo)
+            motivos2.append(f'devolver {modulo} (trick de reativação no {NOMES_MODULOS[modulo]})')
+
     # Monta os textos finais e verifica se houve mudança em relação ao atual
     str_atual = ",".join(lista_atual)
     str_csv1 = ",".join(lista_csv1)
-    str_csv2 = ",".join(lista_csv2) if lista_csv2 is not None else str_csv1
+    str_csv2 = ",".join(lista_csv2)
     motivo_final = "; ".join(motivos)
+    motivo_passo2 = "; ".join(motivos2)
 
-    teve_mudanca_csv1 = (str_atual != str_csv1) or precisa_ativar
-    teve_mudanca_csv2 = str_csv1 != str_csv2
+    teve_mudanca_csv2 = (str_csv1 != str_csv2) or (nome_csv1 != nome_csv2)
+    # Quem vai para o Passo 2 sempre passa antes pelo Passo 1
+    teve_mudanca_csv1 = (str_atual != str_csv1) or precisa_ativar or teve_mudanca_csv2
 
-    return pd.Series([str_csv1, str_csv2, teve_mudanca_csv1, teve_mudanca_csv2, motivo_final])
+    return pd.Series([str_csv1, str_csv2, teve_mudanca_csv1, teve_mudanca_csv2, motivo_final,
+                      nome_csv1, nome_csv2, motivo_passo2])
 
 
 def formatar_acesso_performance(row):
@@ -403,19 +470,21 @@ def formatar_acesso_performance(row):
     return pd.Series([",".join(lista_nova), precisa_ajuste, "; ".join(motivos)])
 
 
-def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False):
+def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False, coluna_nome='first_name', coluna_motivo='motivo'):
     """
     Monta o DataFrame no layout exato do arquivo de upload de usuários do Auth.
 
     coluna_acessos: coluna de df_base com os acessos a enviar ('acessos_csv1' ou 'acessos_csv2').
     incluir_motivo: adiciona a coluna 'motivo_ajuste' (útil para conferência).
+    coluna_nome: coluna de df_base com o first_name a enviar (muda no trick do nome).
+    coluna_motivo: coluna de df_base usada no 'motivo_ajuste'.
     """
     df_upload = pd.DataFrame()
     df_upload['vazio'] = np.nan            # primeira coluna vazia exigida pelo layout
     df_upload['id'] = df_base['id']
     df_upload['username'] = df_base['username']
     df_upload['email'] = df_base['email']
-    df_upload['first_name'] = df_base['first_name']
+    df_upload['first_name'] = df_base[coluna_nome]
     df_upload['last_name'] = df_base['last_name']
     df_upload['login_AD'] = 0
     df_upload['ad_only'] = 0
@@ -427,5 +496,5 @@ def montar_df_upload(df_base, coluna_acessos, incluir_motivo=False):
     df_upload['is_superuser'] = df_base['is_superuser'].map({True: 1, 'True': 1, False: 0, 'False': 0}).fillna(0).astype(int)
 
     if incluir_motivo:
-        df_upload['motivo_ajuste'] = df_base['motivo']
+        df_upload['motivo_ajuste'] = df_base[coluna_motivo]
     return df_upload
