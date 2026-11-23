@@ -85,37 +85,53 @@ def _status_controle(df_registros):
     return {cod: ('Ativo' if aberto else 'Desligado') for cod, aberto in atual.items()}
 
 
-def _coluna_texto(df, nome):
-    """Devolve a coluna 'nome' (ou 'nome.name', se a API tiver expandido o objeto) como texto."""
-    for c in [f'{nome}.name', nome]:
-        if c in df.columns:
-            return df[c]
-    return pd.Series([''] * len(df), index=df.index)
-
-
 def _exigir_colunas(df, colunas, descricao):
     faltando = [c for c in colunas if c not in df.columns]
     if faltando:
         raise ValueError(f"o {descricao} não possui as colunas: {', '.join(faltando)}.")
 
 
+def _historico_hub(df, coluna_valor, so_primaria=False):
+    """
+    Histórico do People Hub (cargos, áreas ou gestores, com person, start_date e end_date) ->
+    dicionário id do person -> valor do registro atual. Usa a mesma regra do Controle:
+    o registro aberto mais recente; se não houver aberto (desligado), o mais recente.
+    Assim os desligados também são comparados com o último valor que tiveram.
+    """
+    if df is None or df.empty or 'person' not in df.columns or coluna_valor not in df.columns:
+        return {}
+    d = df.rename(columns={'start_date': 'start', 'end_date': 'end'}).copy()
+    if so_primaria and 'is_primary' in d.columns:
+        # Se o person tem área principal, considera só ela
+        d['_prim'] = d['is_primary'].astype(str).str.strip().str.lower().isin(['true', '1', '1.0'])
+        tem_prim = d.groupby('person')['_prim'].transform('any')
+        d = d[d['_prim'] | ~tem_prim]
+    d['employee_code'] = d['person']
+    return _registro_atual(d, coluna_valor)
+
+
 def _ler_hub(arquivo, tenant, token_full):
     """
     People Hub: o CSV exportado do admin liga o person ao employee_code (registration_code)
-    e traz o UUID; a API traz cargo, área, gestor (manager_id) e os usernames.
+    e traz o UUID; a API traz o histórico de cargos, áreas e gestores (de ativos e desligados)
+    e os usernames.
     """
     exp = ler_csv_seguro(arquivo, como_texto=True)
     _exigir_colunas(exp, ['id', 'registration_code', 'uuid', 'user'], "CSV exportado do People Hub")
     exp['_id'] = exp['id'].apply(_norm)
     mapa_id_codigo = dict(zip(exp['_id'], exp['registration_code'].apply(_norm)))
 
-    pessoas = chamar_api("os funcionários do People Hub", ler_funcionarios_hub, tenant, token_full)
-    validar_retorno_api(pessoas, "os funcionários do People Hub", ['id'])
-    pessoas['_id'] = pessoas['id'].apply(_norm)
-    pessoas['_cargo'] = _coluna_texto(pessoas, 'position')
-    pessoas['_area'] = _coluna_texto(pessoas, 'area')
-    pessoas['_gestor_id'] = pessoas['manager_id'].apply(_norm) if 'manager_id' in pessoas.columns else ''
-    pessoas = pessoas.drop_duplicates('_id').set_index('_id')
+    # Históricos (trazem ativos e desligados; o endpoint 'people' só traz os ativos)
+    cargos = chamar_api("os cargos do People Hub", get_hub_positions_api, tenant, token_full)
+    areas = chamar_api("as áreas do People Hub", get_hub_areas_api, tenant, token_full)
+    gestores = chamar_api("os gestores do People Hub", get_hub_managers_api, tenant, token_full)
+    if gestores is not None and not gestores.empty:
+        gestores = gestores.copy()
+        col_gestor = 'manager.id' if 'manager.id' in gestores.columns else 'manager'
+        gestores['_gestor_id'] = gestores[col_gestor].apply(_norm) if col_gestor in gestores.columns else ''
+    cargo_atual = _historico_hub(cargos, 'name')
+    area_atual = _historico_hub(areas, 'name', so_primaria=True)
+    gestor_atual = _historico_hub(gestores, '_gestor_id')
 
     usuarios = chamar_api("os usuários do People Hub", ler_usuarios_full, tenant, token_full)
     mapa_usuarios = {}
@@ -127,9 +143,9 @@ def _ler_hub(arquivo, tenant, token_full):
         'Codigo': exp['registration_code'],
         'Username': exp['user'].apply(_norm).map(mapa_usuarios).fillna(''),
         'UUID': exp['uuid'],
-        'Gestor': exp['_id'].map(pessoas['_gestor_id']).fillna('').map(lambda g: mapa_id_codigo.get(g, g)),
-        'Cargo': exp['_id'].map(pessoas['_cargo']).fillna(''),
-        'Area': exp['_id'].map(pessoas['_area']).fillna(''),
+        'Gestor': exp['_id'].map(gestor_atual).fillna('').map(lambda g: mapa_id_codigo.get(g, g)),
+        'Cargo': exp['_id'].map(cargo_atual).fillna(''),
+        'Area': exp['_id'].map(area_atual).fillna(''),
     })
     return hub
 
