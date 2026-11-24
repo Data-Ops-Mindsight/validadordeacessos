@@ -23,8 +23,9 @@ Fluxo da aba:
          (ex.: "CAVALEIRO - CAVALEIRO # ESCRITÓRIO - GRUPO MARSARO - AUDITORIA").
        - Código: "H" + nível + "-" + 8 caracteres gerados a partir do caminho
          (ex.: H4-3F9A2C1B). O mesmo caminho gera sempre o mesmo código.
-     Um nível vazio (ex.: área sem área pai) é pulado nesse caminho.
-  5. Arquivos gerados: áreas (instâncias), registros de área, áreas pai e áreas dos
+     Um nível vazio (ex.: área sem área pai) é pulado nesse caminho, e um nível com o mesmo
+     nome do anterior (ex.: filial igual à empresa) é juntado com ele.
+  5. Arquivos gerados (CSV, para importar no Controle): áreas (instâncias), registros de área, áreas pai e áreas dos
      funcionários, além de uma planilha de conferência.
   Funcionários da Mindsight são ignorados.
 """
@@ -221,8 +222,14 @@ def montar_hierarquia(dados, niveis, modo, hoje):
             AREA_PAI: nome_area.get(cod_pai, cod_pai),
             AREA: area_nome,
         }
-        caminho = tuple(valores[n] for n in niveis if valores[n])
-        tipos = [n for n in niveis if valores[n]]
+        # Níveis vazios são pulados; nível com o mesmo nome do anterior (ex.: filial igual à
+        # empresa) é juntado com ele, para não ficar "BARÃO - BARÃO - ..."
+        caminho, tipos = [], []
+        for n in niveis:
+            if valores[n] and not (caminho and _chave(caminho[-1]) == _chave(valores[n])):
+                caminho.append(valores[n])
+                tipos.append(n)
+        caminho = tuple(caminho)
         faltando = [n for n in niveis if not valores[n]]
         if r is None:
             avisos.append((cod_func, nome_func.get(cod_func, ''), v['area_code'],
@@ -474,8 +481,9 @@ def render_aba9():
     for col, (chave, titulo, nome) in zip(cols, arquivos):
         df = res[chave]
         col.metric(titulo, len(df))
-        col.download_button("📥 Baixar (Excel)", data=gerar_excel(df), file_name=f"{tenant}_{nome}.xlsx",
-                            mime=MIME_EXCEL, key=f"down_t9_{chave}", disabled=df.empty)
+        col.download_button("📥 Baixar (CSV)", data=df.to_csv(index=False, sep=',', encoding='utf-8-sig'),
+                            file_name=f"{tenant}_{nome}.csv", mime="text/csv",
+                            key=f"down_t9_{chave}", disabled=df.empty)
     st.caption("No arquivo 4, as linhas com `id` preenchido atualizam um vínculo que já existe; "
                "as linhas com `id` vazio criam um vínculo novo.")
 
