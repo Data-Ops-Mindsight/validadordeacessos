@@ -52,6 +52,7 @@ from abas.aba5_funcionarios_modulos import render_aba5
 from abas.aba6_regras_bps import render_aba6
 from abas.aba7_senhas import render_aba7
 from abas.aba8_salarios import render_aba8
+from abas.aba9_hierarquia_areas import render_aba9
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -80,6 +81,7 @@ apply_style()
 #   t6_processed / t6_csv / t6_novas / t6_existentes / t6_resumo: regras calculadas e relatórios
 #   t7_processed / t7_tenant / t7_cliente / t7_script / t7_fora / t7_resumo: senhas geradas e relatórios
 #   t8_processed / t8_tenant / t8_resultado: validação de salários (resumo e tabelas)
+#   t9_processed / t9_tenant / t9_resultado: hierarquia de áreas (resumo, árvore e arquivos de importação)
 chaves_memoria = {
     't1_processed': False, 't1_df1': pd.DataFrame(), 't1_df2': pd.DataFrame(), 't1_len': 0, 't1_tenant': "", 't1_mod_verificados': [],
     't2_processed': False, 't2_df': pd.DataFrame(), 't2_tenant': "", 't2_msg': "", 't2_empty': False,
@@ -93,7 +95,8 @@ chaves_memoria = {
     't6_existentes': pd.DataFrame(), 't6_resumo': pd.DataFrame(),
     't7_processed': False, 't7_tenant': "", 't7_cliente': pd.DataFrame(), 't7_script': pd.DataFrame(),
     't7_fora': pd.DataFrame(), 't7_resumo': pd.DataFrame(),
-    't8_processed': False, 't8_tenant': "", 't8_resultado': {}
+    't8_processed': False, 't8_tenant': "", 't8_resultado': {},
+    't9_processed': False, 't9_tenant': "", 't9_resultado': {}
 }
 
 for chave, valor in chaves_memoria.items():
@@ -143,6 +146,7 @@ paginas = {
     "People Hub / Organograma": [
         st.Page(render_aba6, title="Regras de Acessos (BPs)", icon="🛠️", url_path="regras-bps"),
         st.Page(render_aba8, title="Validação de Salários", icon="💰", url_path="validacao-salarios"),
+        st.Page(render_aba9, title="Hierarquia de Áreas", icon="🌳", url_path="hierarquia-areas"),
     ],
 }
 pagina = st.navigation(paginas, position="sidebar")
