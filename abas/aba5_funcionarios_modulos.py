@@ -497,7 +497,7 @@ def render_aba5():
                         partes.append(parte)
                     if not partes:
                         return pd.DataFrame()
-                    df = pd.concat(partes, ignore_index=True)
+                    df = pd.concat(partes, ignore_index=True).sort_values(['Status', 'Nome'], kind='stable')
                     # Cargo e área só são verificados no Hub: a coluna Módulo não acrescenta nada
                     return df.drop(columns=['Módulo']) if campo in ('Cargo', 'Area') else df
 
@@ -571,13 +571,40 @@ def render_aba5():
         st.write("<br>", unsafe_allow_html=True)
 
         # Uma tabela enxuta para cada tipo de problema (o Excel traz também a base completa)
+        # separadas entre funcionários ativos e desligados
         st.subheader("Detalhes das divergências")
-        for nome in ['Não Existem nos Módulos', 'Username Divergente', 'UUID Divergente', 'Gestor Divergente',
-                     'Cargo Divergente', 'Área Divergente', 'Duplicados nos Módulos']:
+        tipos = [('Não Existem nos Módulos', '🚫'), ('Username Divergente', '👤'), ('UUID Divergente', '🔑'),
+                 ('Gestor Divergente', '🧭'), ('Cargo Divergente', '💼'), ('Área Divergente', '🏢')]
+
+        def _filtrar(nome, status):
             df = planilhas.get(nome, pd.DataFrame())
-            if not df.empty:
-                with st.expander(f"👁️ {nome} ({len(df)})"):
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+            if df.empty or 'Status' not in df.columns:
+                return pd.DataFrame()
+            return df[df['Status'] == status].drop(columns=['Status'])
+
+        abas_status = []
+        for status, icone in [('Ativo', '🟢'), ('Desligado', '⚪')]:
+            total = sum(len(_filtrar(nome, status)) for nome, _ in tipos)
+            abas_status.append((status, f"{icone} Funcionários {status.lower()}s ({total} {'divergência' if total == 1 else 'divergências'})"))
+        for (status, _), aba in zip(abas_status, st.tabs([rotulo for _, rotulo in abas_status])):
+            with aba:
+                # Quadro com a quantidade de cada tipo, e uma tabela por tipo logo abaixo
+                contagens = [(nome, icone, len(_filtrar(nome, status))) for nome, icone in tipos]
+                if not any(q for _, _, q in contagens):
+                    st.success(f"Nenhuma divergência nos funcionários {status.lower()}s. 🎉")
+                    continue
+                colunas = st.columns(len(contagens))
+                for col, (nome, icone, qtd) in zip(colunas, contagens):
+                    col.metric(f"{icone} {nome.replace(' Divergente', '').replace(' nos Módulos', '')}", qtd)
+                for nome, icone, qtd in contagens:
+                    if qtd:
+                        with st.expander(f"{icone} {nome} ({qtd})"):
+                            st.dataframe(_filtrar(nome, status), use_container_width=True, hide_index=True)
+
+        duplicados = planilhas.get('Duplicados nos Módulos', pd.DataFrame())
+        if not duplicados.empty:
+            with st.expander(f"♊ Duplicados nos Módulos ({len(duplicados)}) - mesmo código mais de uma vez no módulo"):
+                st.dataframe(duplicados, use_container_width=True, hide_index=True)
 
         st.download_button("📥 Baixar Análise Completa (Excel)",
                            data=gerar_excel_multi_abas({k: v for k, v in planilhas.items() if not v.empty}),
