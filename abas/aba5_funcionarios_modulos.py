@@ -58,21 +58,96 @@ def _limpar_codigo(valor):
     return texto[:-2] if texto.endswith('.0') and texto[:-2].isdigit() else texto
 
 
-def _registro_atual(df, coluna_valor):
+def _linhas_atuais(df):
     """
-    Para cada employee_code, pega o registro atual (aberto e mais recente; se não houver
-    registro aberto, o mais recente) e devolve um dicionário código -> valor da coluna.
+    Para cada employee_code, devolve a linha do registro atual (aberto e mais recente; se não
+    houver registro aberto, o mais recente), indexada pelo código normalizado. As colunas
+    _start e _end trazem as datas já convertidas.
     """
-    if df is None or df.empty or 'employee_code' not in df.columns or coluna_valor not in df.columns:
-        return {}
+    if df is None or df.empty or 'employee_code' not in df.columns:
+        return pd.DataFrame()
     d = df.copy()
-    d['start'] = pd.to_datetime(d['start'], errors='coerce') if 'start' in d.columns else pd.NaT
-    d['end'] = pd.to_datetime(d['end'], errors='coerce') if 'end' in d.columns else pd.NaT
+    d['_start'] = pd.to_datetime(d['start'], errors='coerce') if 'start' in d.columns else pd.NaT
+    d['_end'] = pd.to_datetime(d['end'], errors='coerce') if 'end' in d.columns else pd.NaT
     d['_cod'] = d['employee_code'].apply(_norm)
     # Registro "em aberto" (end vazio) ou o mais recente fica por último
-    d = d.sort_values(by=['_cod', 'end', 'start'], ascending=True, na_position='last')
-    d = d.drop_duplicates(subset='_cod', keep='last')
-    return d.set_index('_cod')[coluna_valor].to_dict()
+    d = d.sort_values(by=['_cod', '_end', '_start'], ascending=True, na_position='last')
+    return d.drop_duplicates(subset='_cod', keep='last').set_index('_cod')
+
+
+def _registro_atual(df, coluna_valor):
+    """Dicionário código -> valor da coluna no registro atual (ver _linhas_atuais)."""
+    if df is None or df.empty or coluna_valor not in df.columns:
+        return {}
+    atuais = _linhas_atuais(df)
+    return atuais[coluna_valor].to_dict() if not atuais.empty else {}
+
+
+def _data_txt(data):
+    """Data no formato AAAA-MM-DD (vazio se não houver data)."""
+    return '' if pd.isna(data) else pd.Timestamp(data).strftime('%Y-%m-%d')
+
+
+def _tricks_metas(base, registros, gestores):
+    """
+    Tricks no Controle para criar o person (e o parent) no Metas. Só funcionários ATIVOS.
+      - Não existe no Metas: edita o contract_type do registro de funcionário mais recente
+        ('others'; se já for 'others', fica vazio) -> cria o person; e a data de início da
+        gestão mais recente + 1 dia -> preenche o parent.
+      - Existe no Metas, com UUID e usuário iguais ao Controle, mas sem gestor: só a gestão.
+    Devolve (lista de funcionários, registros edição, registros volta, gestões edição, gestões volta).
+    """
+    vazio = (pd.DataFrame(),) * 5
+    if 'Existe_Metas' not in base.columns:
+        return vazio
+    ativos = base[base['Status'] == 'Ativo'].copy()
+    ativos['_cod'] = ativos['employee_code'].apply(_norm)
+    nao_existe = ativos[ativos['Existe_Metas'] == 'Não']
+    sem_gestor = ativos[(ativos['Existe_Metas'] == 'Sim') & (ativos['Match_UUID_Metas'] == OK) &
+                        (ativos['Match_Username_Metas'] == OK) & (ativos['Gestor_Metas'].apply(_norm) == '') &
+                        (ativos['Gestor_Controle'].apply(_norm) != '')]
+
+    reg_atual, ges_atual = _linhas_atuais(registros), _linhas_atuais(gestores)
+    col_gestor = 'manager_code' if gestores is not None and 'manager_code' in gestores.columns else 'manager'
+    cols_reg = ['employee_code', 'contract_type', 'start', 'end', 'id']
+    cols_ges = ['employee_code', col_gestor, 'start', 'end', 'id']
+    reg_edit, reg_volta, ges_edit, ges_volta, lista = [], [], [], [], []
+
+    def _gestao(cod):
+        if ges_atual.empty or cod not in ges_atual.index:
+            return False
+        g = ges_atual.loc[cod]
+        if pd.isna(g['_start']):
+            return False
+        base_g = {'employee_code': g['employee_code'], col_gestor: _limpar_codigo(g.get(col_gestor)),
+                  'end': _data_txt(g['_end']), 'id': _limpar_codigo(g.get('id'))}
+        ges_volta.append({**base_g, 'start': _data_txt(g['_start'])})
+        ges_edit.append({**base_g, 'start': _data_txt(g['_start'] + pd.Timedelta(days=1))})
+        return True
+
+    for _, f in nao_existe.iterrows():
+        cod = f['_cod']
+        tem_reg = not reg_atual.empty and cod in reg_atual.index
+        if tem_reg:
+            r = reg_atual.loc[cod]
+            original = '' if pd.isna(r.get('contract_type')) else str(r.get('contract_type')).strip()
+            base_r = {'employee_code': r['employee_code'], 'start': _data_txt(r['_start']),
+                      'end': _data_txt(r['_end']), 'id': _limpar_codigo(r.get('id'))}
+            reg_edit.append({**base_r, 'contract_type': '' if original.lower() == 'others' else 'others'})
+            reg_volta.append({**base_r, 'contract_type': original})
+        tem_ges = _gestao(cod)
+        lista.append({'employee_code': f['employee_code'], 'Nome': f['Nome'], 'Situação no Metas': 'Não existe',
+                      'Trick': 'Registro de funcionário' + (' + Gestão' if tem_ges else ' (sem gestão no Controle)')
+                      if tem_reg else 'Sem registro de funcionário no Controle'})
+    for _, f in sem_gestor.iterrows():
+        if _gestao(f['_cod']):
+            lista.append({'employee_code': f['employee_code'], 'Nome': f['Nome'],
+                          'Situação no Metas': 'Existe, sem gestor', 'Trick': 'Gestão'})
+
+    def _df(linhas, cols):
+        return pd.DataFrame(linhas, columns=cols) if linhas else pd.DataFrame(columns=cols)
+    return (pd.DataFrame(lista), _df(reg_edit, cols_reg), _df(reg_volta, cols_reg),
+            _df(ges_edit, cols_ges), _df(ges_volta, cols_ges))
 
 
 def _status_controle(df_registros):
@@ -374,6 +449,9 @@ def render_aba5():
 
                 base = base.drop(columns=['_cod']).sort_values(['Status', 'Nome']).reset_index(drop=True)
 
+                # --- Tricks no Controle para criar o person/parent no Metas (só ativos) ---
+                st.session_state.t5_tricks_metas = _tricks_metas(base, registros, gestores)
+
                 # --- Resumo: uma linha por verificação e módulo ---
                 nomes_campos = {'Username': 'Username', 'UUID': 'UUID', 'Gestor': 'Gestor atual',
                                 'Cargo': 'Cargo atual', 'Area': 'Área atual'}
@@ -504,3 +582,51 @@ def render_aba5():
         st.download_button("📥 Baixar Análise Completa (Excel)",
                            data=gerar_excel_multi_abas({k: v for k, v in planilhas.items() if not v.empty}),
                            file_name=f"{tenant}_funcionarios_x_modulos.xlsx", mime=MIME_EXCEL, key="down_t5")
+
+        _render_tricks_metas(tenant)
+
+
+def _render_tricks_metas(tenant):
+    """Mostra os tricks do Metas e os arquivos de edição e de volta."""
+    tricks = st.session_state.get('t5_tricks_metas')
+    if 'Metas' not in st.session_state.t5_mod_verificados or not tricks:
+        return
+    lista, reg_edit, reg_volta, ges_edit, ges_volta = tricks
+    st.write("---")
+    st.subheader("🔁 Tricks para criar no Metas (funcionários ativos)")
+    if lista.empty:
+        st.info("Nenhum funcionário ativo precisa de trick no Metas.")
+        return
+    st.markdown(
+        "O person do Metas é criado a partir do **Controle**. Para forçar a criação, editamos o Controle e "
+        "depois voltamos tudo como estava:\n"
+        "- **Não existe no Metas:** troca o `contract_type` do **registro de funcionário mais recente** "
+        "(para `others`; se já for `others`, fica vazio), o que cria o person; e soma **1 dia** na data de "
+        "início da **gestão mais recente**, o que preenche o gestor (parent);\n"
+        "- **Existe no Metas, com UUID e usuário iguais, mas sem gestor:** só a edição da gestão.\n\n"
+        "**Ordem para subir no Controle:**\n"
+        "1. **Registros - edição** e espere o person ser criado no Metas;\n"
+        "2. **Gestões - edição** e espere o gestor aparecer no person;\n"
+        "3. **Registros - volta** e **Gestões - volta**, para deixar o Controle como estava."
+    )
+    resumo = lista['Trick'].value_counts().reset_index()
+    resumo.columns = ['Trick', 'Funcionários']
+    st.markdown(resumo.to_html(index=False), unsafe_allow_html=True)
+    st.write("<br>", unsafe_allow_html=True)
+    with st.expander(f"👁️ Funcionários com trick ({len(lista)})"):
+        st.dataframe(lista, use_container_width=True, hide_index=True)
+
+    arquivos = [("Registros - edição", reg_edit, "registros_edicao"),
+                ("Gestões - edição", ges_edit, "gestoes_edicao"),
+                ("Registros - volta", reg_volta, "registros_volta"),
+                ("Gestões - volta", ges_volta, "gestoes_volta")]
+    colunas = st.columns(4)
+    for col, (rotulo, df, sufixo) in zip(colunas, arquivos):
+        with col:
+            st.markdown(f"**{rotulo}** ({len(df)})")
+            if df.empty:
+                st.caption("Nada para subir.")
+            else:
+                st.download_button(f"📥 {rotulo} (CSV)", data=df.to_csv(index=False, encoding='utf-8-sig'),
+                                   file_name=f"{tenant}_metas_{sufixo}.csv", mime="text/csv",
+                                   key=f"down_t5_{sufixo}")
