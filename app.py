@@ -53,6 +53,7 @@ from abas.aba6_regras_bps import render_aba6
 from abas.aba7_senhas import render_aba7
 from abas.aba8_salarios import render_aba8
 from abas.aba9_hierarquia_areas import render_aba9
+from abas.aba10_construcao_relatorios import render_aba10
 
 # Aplica o estilo Mindsight
 apply_style()
@@ -147,6 +148,9 @@ paginas = {
         st.Page(render_aba6, title="Regras de Acessos (BPs)", icon="🛠️", url_path="regras-bps"),
         st.Page(render_aba8, title="Validação de Salários", icon="💰", url_path="validacao-salarios"),
         st.Page(render_aba9, title="Hierarquia de Áreas", icon="🌳", url_path="hierarquia-areas"),
+    ],
+    "Relatórios": [
+        st.Page(render_aba10, title="Construção de Relatórios", icon="📊", url_path="construcao-relatorios"),
     ],
 }
 pagina = st.navigation(paginas, position="sidebar")
